@@ -21,7 +21,7 @@ router.get("/", async (req, res) => {
   const skip = (page - 1) * limit;
   const questions = await Question.find({})
     .select({
-      questionNo: 1,
+      questionNum: 1,
       title: 1,
       slug: 1,
       difficulty: 1,
@@ -36,10 +36,10 @@ router.get("/", async (req, res) => {
   });
 });
 
-router.get("/:questionId", async (req, res) => {
-  const questionId = req.params.questionId;
+router.get("/:slug", async (req, res) => {
+  const slug = req.params.slug;
 
-  const question = await Question.findOne({ _id: questionId }).select({
+  const question = await Question.findOne({ slug }).select({
     hiddenTestCases: 0,
   });
 
