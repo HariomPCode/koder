@@ -19,3 +19,6 @@ worker/dist/
 # OS files
 .DS_Store
 Thumbs.db
+
+Dockerfile
+docker-compose.yml

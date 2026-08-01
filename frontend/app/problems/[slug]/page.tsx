@@ -39,7 +39,6 @@ export default function SolveProblem() {
 
   const [problem, setProblem] = useState<Problem | null>(null);
   const [submission, setSubmission] = useState<Submission | null>(null);
-  const [jobId, setJobId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [code, setCode] = useState(`function solve() {
@@ -64,6 +63,7 @@ export default function SolveProblem() {
       const data = await res.json();
 
       setProblem(data.question);
+      setCode(data.question.starterCode[0].code);
     } catch (err) {
       console.error(err);
 
@@ -100,8 +100,6 @@ export default function SolveProblem() {
       }
 
       const data = await res.json();
-
-      setJobId(data.jobId);
 
       toast.add({
         type: "success",
