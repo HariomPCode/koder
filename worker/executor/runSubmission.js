@@ -11,7 +11,7 @@ async function runSubmission(job) {
 
   const { language, code, testcases } = await getQuestionDetails(submissionId);
 
-  if (language !== "js") {
+  if (language !== "javascript") {
     throw new Error("Unsupported language");
   }
 

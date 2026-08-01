@@ -17,8 +17,8 @@ import { useState } from "react";
 export default function Signup() {
   const [loading, setLoading] = useState(false);
 
-  const [firstname, setFirstname] = useState("");
-  const [lastname, setLastname] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
@@ -36,8 +36,8 @@ export default function Signup() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          firstname,
-          lastname,
+          firstName,
+          lastName,
           email,
           password,
         }),
@@ -68,25 +68,25 @@ export default function Signup() {
           <CardContent>
             <div className="flex flex-col gap-6">
               <div className="grid gap-2">
-                <Label htmlFor="firstname">Firstname</Label>
+                <Label htmlFor="firstName">FirstName</Label>
                 <Input
-                  id="firstname"
+                  id="firstName"
                   type="text"
                   placeholder="John"
                   required
-                  value={firstname}
-                  onChange={(e) => setFirstname(e.target.value)}
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="lastname">Lastname</Label>
+                <Label htmlFor="lastName">LastName</Label>
                 <Input
-                  id="lastname"
+                  id="lastName"
                   type="text"
                   placeholder="Doe"
                   required
-                  value={lastname}
-                  onChange={(e) => setLastname(e.target.value)}
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
                 />
               </div>
               <div className="grid gap-2">
