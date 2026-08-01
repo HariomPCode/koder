@@ -28,7 +28,6 @@ const questionSchema = new mongoose.Schema(
     },
 
     slug: {
-      // route name
       type: String,
       required: true,
       unique: true,
@@ -41,6 +40,30 @@ const questionSchema = new mongoose.Schema(
     },
 
     description: {
+      type: String,
+      required: true,
+    },
+
+    starterCode: [
+      {
+        language: {
+          type: String,
+          enum: ["javascript", "java", "python"],
+          required: true,
+        },
+        code: {
+          type: String,
+          required: true,
+        },
+      },
+    ],
+
+    functionName: {
+      type: String,
+      required: true,
+    },
+
+    returnType: {
       type: String,
       required: true,
     },

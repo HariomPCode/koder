@@ -46,6 +46,8 @@ router.get("/:jobId", middleware, async (req, res) => {
     });
   }
 
+  console.log(job);
+
   const submission = await Submission.findById({ _id: job.data.submissionId });
 
   return res.json({

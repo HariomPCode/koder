@@ -18,6 +18,7 @@ async function getQuestionDetails(submissionId) {
     language: submission.language,
     code: submission.code,
     testcases: [...question.sampleTestCases, ...question.hiddenTestCases],
+    slug: question.slug,
   };
 }
 
