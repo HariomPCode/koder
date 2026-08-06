@@ -1,13 +1,18 @@
 const fs = require("fs");
 const { join } = require("path");
 
-function createSandBox(jobId, code) {
+function createSandBox(jobId, code, slug) {
   const jobDir = join(__dirname, "temp", String(jobId));
 
   const dockerPath = jobDir.replace(/\\/g, "/");
   fs.mkdirSync(jobDir, { recursive: true });
   const filePath = join(jobDir, "app.js");
-  fs.writeFileSync(filePath, code);
+
+  const template = fs.readFileSync(`templates/javascript/${slug}.js`, "utf8");
+
+  const finalCode = template.replace("/*__USER_CODE__*/", code);
+
+  fs.writeFileSync(filePath, finalCode);
 
   const dockerArgs = [
     "run",

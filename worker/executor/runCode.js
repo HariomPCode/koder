@@ -1,7 +1,12 @@
+const fs = require("fs");
+const path = require("path");
+
 const { spawn } = require("child_process");
 
-function runCode(input, dockerArgs) {
+function runCode(jobDir, dockerArgs) {
   return new Promise((resolve, reject) => {
+    const input = fs.readFileSync(path.join(jobDir, "input.txt"), "utf8");
+
     const child = spawn("docker", dockerArgs);
 
     let stdout = "";

@@ -2,6 +2,7 @@ const express = require("express");
 const middleware = require("../middleware");
 const User = require("../models/User");
 const Submission = require("../models/Submission");
+const Questions = require("../models/Question");
 
 const router = express.Router();
 
@@ -24,32 +25,79 @@ router.get("/", middleware, async (req, res) => {
 });
 
 router.get("/stats", middleware, async (req, res) => {
-  const userId = req.userId;
+  try {
+    const userId = req.userId;
 
-  const submissions = await Submission.find({ userId });
+    const submissions = await Submission.find({ userId });
 
-  if (submissions.length === 0) {
+    const totalSubmissions = submissions.length;
+
+    const solvedQuestions = new Set();
+    const attemptedQuestions = new Set();
+
+    let acceptedSubmissions = 0;
+
+    for (const submission of submissions) {
+      attemptedQuestions.add(submission.questionId.toString());
+
+      if (submission.verdict === "Accepted") {
+        solvedQuestions.add(submission.questionId.toString());
+        acceptedSubmissions++;
+      }
+    }
+
+    const solvedQuestionDocs = await Questions.find({
+      _id: { $in: [...solvedQuestions] },
+    }).select("difficulty");
+
+    let solvedEasyQuestions = 0;
+    let solvedMediumQuestions = 0;
+    let solvedHardQuestions = 0;
+
+    for (const question of solvedQuestionDocs) {
+      switch (question.difficulty) {
+        case "Easy":
+          solvedEasyQuestions++;
+          break;
+
+        case "Medium":
+          solvedMediumQuestions++;
+          break;
+
+        case "Hard":
+          solvedHardQuestions++;
+          break;
+      }
+    }
+
+    const acceptanceRate =
+      totalSubmissions === 0
+        ? 0
+        : Number(((acceptedSubmissions / totalSubmissions) * 100).toFixed(2));
+
     return res.json({
-      message: "No submissions made by this user",
+      totalSubmissions,
+
+      solvedCount: solvedQuestions.size,
+      attemptedCount: attemptedQuestions.size,
+      attemptedButUnsolved: attemptedQuestions.size - solvedQuestions.size,
+
+      acceptedSubmissions,
+      acceptanceRate,
+
+      solvedEasyQuestions,
+      solvedMediumQuestions,
+      solvedHardQuestions,
+
+      solvedQuestions: [...solvedQuestions],
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      message: "Failed to fetch user statistics.",
     });
   }
-
-  const solvedQuestions = new Set();
-  const attemptedQuestions = new Set();
-
-  for (const sub of submissions) {
-    if (sub.verdict === "Accepted") {
-      solvedQuestions.add(sub.questionId.toString());
-    }
-    attemptedQuestions.add(sub.questionId.toString());
-  }
-
-  return res.json({
-    solvedQuestions: [...solvedQuestions],
-    totalNumberOfAttemptedQuestions:
-      attemptedQuestions.size - solvedQuestions.size,
-    totalSubmissions: submissions.length,
-  });
 });
 
 module.exports = router;

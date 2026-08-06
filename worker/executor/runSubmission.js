@@ -1,3 +1,5 @@
+const fs = require("fs");
+const path = require("path");
 const { performance } = require("perf_hooks");
 
 const { getQuestionDetails } = require("../../backend/db_calls/getDetails");
@@ -9,26 +11,33 @@ const updateSubmission = require("../../backend/db_calls/updateSubmission");
 async function runSubmission(job) {
   const { submissionId } = job.data;
 
-  const { language, code, testcases } = await getQuestionDetails(submissionId);
+  const { language, code, testcases, slug } =
+    await getQuestionDetails(submissionId);
 
   if (language !== "javascript") {
     throw new Error("Unsupported language");
   }
 
-  const { jobDir, dockerArgs } = createSandBox(job.id, code);
+  const { jobDir, dockerArgs } = createSandBox(job.id, code, slug);
+
+  const inputFile = path.join(jobDir, "input.txt");
 
   const total = testcases.length;
   let passed = 0;
   let totalRuntime = 0;
   let maxRuntime = 0;
-  let result;
+  let result = null;
 
   try {
     for (const testcase of testcases) {
+      // Create / overwrite input.txt for this testcase
+      fs.writeFileSync(inputFile, testcase.input, "utf8");
+
       const start = performance.now();
 
       try {
-        const output = await runCode(testcase.input, dockerArgs);
+        // runCode will read input.txt and feed it to stdin
+        const output = await runCode(jobDir, dockerArgs);
 
         const runtime = performance.now() - start;
 
@@ -43,7 +52,7 @@ async function runSubmission(job) {
             total,
             totalRuntime: Math.round(totalRuntime),
             maxRuntime: Math.round(maxRuntime),
-            memory: 0, //unable to calculate now
+            memory: 0,
             failedTestCase: {
               input: testcase.input,
               expected: testcase.output,
@@ -65,7 +74,10 @@ async function runSubmission(job) {
           totalRuntime: Math.round(totalRuntime),
           maxRuntime: Math.round(maxRuntime),
           memory: 0,
-          failedTestCase: testcase,
+          failedTestCase: {
+            input: testcase.input,
+            expected: testcase.output,
+          },
           errorMessage: err.message,
         };
 
@@ -87,9 +99,7 @@ async function runSubmission(job) {
       };
     }
 
-    const submission = await updateSubmission(submissionId, result);
-
-    return submission;
+    return await updateSubmission(submissionId, result);
   } finally {
     cleanupSandbox(jobDir);
   }

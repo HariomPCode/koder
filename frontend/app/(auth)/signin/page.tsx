@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/hooks/useAuth";
 import { CheckCircle2Icon } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -19,6 +20,8 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+
+  const { refreshUser } = useAuth();
 
   const backendUri = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -50,6 +53,7 @@ export default function Login() {
       console.error(error);
     } finally {
       setLoading(false);
+      await refreshUser();
     }
   };
   return (

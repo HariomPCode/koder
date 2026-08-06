@@ -55,17 +55,16 @@ function Problems() {
     <>
       <div>
         {problems.map((problem) => (
-          <Link href={`/problems/${problem.slug}`}>
-            <div
-              key={problem._id}
-              className="flex justify-between items-center m-2 p-2 pl-4 pr-4 bg-gray-200 rounded-sm"
-            >
-              <div className="flex gap-2">
-                <h2>{problem.questionNum}</h2>
-                <p>{problem.title}</p>
-              </div>
-              <p>{problem.difficulty}</p>
+          <Link
+            key={problem._id}
+            href={`/problems/${problem.slug}`}
+            className="flex justify-between items-center m-2 p-2 pl-4 pr-4 bg-gray-200 rounded-sm"
+          >
+            <div className="flex gap-2">
+              <h2>{problem.questionNum}</h2>
+              <p>{problem.title}</p>
             </div>
+            <p>{problem.difficulty}</p>
           </Link>
         ))}
       </div>
