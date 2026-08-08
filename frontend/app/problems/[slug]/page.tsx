@@ -10,6 +10,11 @@ interface Testcase {
   output: string;
 }
 
+interface StarterCode {
+  language: string;
+  code: string;
+}
+
 interface Problem {
   _id: string;
   questionNum: number;
@@ -20,6 +25,7 @@ interface Problem {
   constraints: string[];
   sampleTestCases: Testcase[];
   tags: string[];
+  starterCode: StarterCode[];
 }
 
 interface Submission {
@@ -44,7 +50,7 @@ export default function SolveProblem() {
   const [code, setCode] = useState(`function solve() {
 
 }`);
-  const [language, setLanguage] = useState("javascript");
+  const [language, setLanguage] = useState("");
 
   useEffect(() => {
     if (slug) {
@@ -62,8 +68,18 @@ export default function SolveProblem() {
 
       const data = await res.json();
 
+      console.log(data.question);
+
       setProblem(data.question);
-      setCode(data.question.starterCode[0].code);
+
+      const defaultLanguage = "javascript";
+
+      const starter = data.question.starterCode.find(
+        (item: StarterCode) => item.language === defaultLanguage,
+      );
+
+      setLanguage(defaultLanguage);
+      setCode(starter?.code ?? "");
     } catch (err) {
       console.error(err);
 
@@ -74,12 +90,30 @@ export default function SolveProblem() {
     }
   };
 
+  const handleLanguageChange = (
+    event: React.ChangeEvent<HTMLSelectElement>,
+  ) => {
+    const newLanguage = event.target.value;
+
+    setLanguage(newLanguage);
+
+    const starter = problem?.starterCode.find(
+      (item) => item.language === newLanguage,
+    );
+
+    setCode(starter?.code ?? "");
+
+    // Clear previous result
+    setSubmission(null);
+  };
+
   const submitProblem = async () => {
     if (!problem) return;
 
     setIsSubmitting(true);
 
     try {
+      console.log(language, code);
       const res = await fetch(
         `${backendUri}/api/v1/submissions/${problem._id}`,
         {
@@ -106,7 +140,7 @@ export default function SolveProblem() {
         description: "Submission queued",
       });
 
-      pollSubmission(data.jobId);
+      pollSubmission(data.submissionId);
     } catch (err) {
       console.error(err);
 
@@ -119,12 +153,15 @@ export default function SolveProblem() {
     }
   };
 
-  const pollSubmission = (jobId: string) => {
+  const pollSubmission = (submissionId: string) => {
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`${backendUri}/api/v1/submissions/${jobId}`, {
-          credentials: "include",
-        });
+        const res = await fetch(
+          `${backendUri}/api/v1/submissions/${submissionId}`,
+          {
+            credentials: "include",
+          },
+        );
 
         if (!res.ok) {
           throw new Error("Failed to fetch submission");
@@ -184,8 +221,9 @@ export default function SolveProblem() {
 
         <div className="flex items-center gap-3">
           <select
+            value={language}
+            onChange={handleLanguageChange}
             className="border rounded-md px-3 py-2 text-sm"
-            defaultValue="javascript"
           >
             <option value="javascript">JavaScript</option>
             <option value="java">Java</option>
@@ -261,7 +299,7 @@ export default function SolveProblem() {
           <div className="flex-1">
             <Editor
               height="100%"
-              defaultLanguage="javascript"
+              language={language}
               theme="vs-dark"
               value={code}
               onChange={(value) => setCode(value ?? "")}

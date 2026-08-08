@@ -4,7 +4,7 @@ const n = +input[0];
 const nums = input[1].split(" ").map(Number);
 const target = +input[2];
 
-/*__USER_CODE__*/
+/***USER_CODE***/
 
 const ans = twoSum(nums, target);
 

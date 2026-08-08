@@ -3,8 +3,10 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon index.js"
+    "worker:js": "node javascript/worker.js",
+    "worker:java": "node java/worker.js",
+    "dev:js": "nodemon javascript/worker.js",
+    "dev:java": "nodemon java/worker.js"
   },
   "keywords": [],
   "author": "",

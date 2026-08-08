@@ -7,9 +7,11 @@ const connection = new IoRedis({
   maxRetriesPerRequest: null,
 });
 
-const queue = new Queue("js-queue", { connection });
+const jsQueue = new Queue("js-queue", { connection });
+const javaQueue = new Queue("java-queue", { connection });
 
 module.exports = {
   connection,
-  queue,
+  jsQueue,
+  javaQueue,
 };

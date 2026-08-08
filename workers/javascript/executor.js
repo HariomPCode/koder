@@ -3,12 +3,12 @@ const path = require("path");
 const { performance } = require("perf_hooks");
 
 const { getQuestionDetails } = require("../../backend/db_calls/getDetails");
-const createSandBox = require("./createSandBox");
+const createSandbox = require("../common/createSandbox");
+const cleanupSandbox = require("../common/cleanupSandbox");
 const runCode = require("./runCode");
-const cleanupSandbox = require("./cleanupSandbox");
 const updateSubmission = require("../../backend/db_calls/updateSubmission");
 
-async function runSubmission(job) {
+async function executor(job) {
   const { submissionId } = job.data;
 
   const { language, code, testcases, slug } =
@@ -18,8 +18,9 @@ async function runSubmission(job) {
     throw new Error("Unsupported language");
   }
 
-  const { jobDir, dockerArgs } = createSandBox(job.id, code, slug);
+  const jobDir = createSandbox(job.id);
 
+  const jsFile = path.join(jobDir, "main.js");
   const inputFile = path.join(jobDir, "input.txt");
 
   const total = testcases.length;
@@ -29,6 +30,14 @@ async function runSubmission(job) {
   let result = null;
 
   try {
+    const template = fs.readFileSync(
+      path.join(__dirname, "templates/javascript", `${slug}.js`),
+      "utf8",
+    );
+
+    const finalCode = template.replace("/***USER_CODE***/", code);
+    fs.writeFileSync(jsFile, finalCode, "utf8");
+
     for (const testcase of testcases) {
       // Create / overwrite input.txt for this testcase
       fs.writeFileSync(inputFile, testcase.input, "utf8");
@@ -37,7 +46,7 @@ async function runSubmission(job) {
 
       try {
         // runCode will read input.txt and feed it to stdin
-        const output = await runCode(jobDir, dockerArgs);
+        const output = await runCode(jobDir);
 
         const runtime = performance.now() - start;
 
@@ -105,4 +114,4 @@ async function runSubmission(job) {
   }
 }
 
-module.exports = runSubmission;
+module.exports = executor;

@@ -1,7 +1,7 @@
 const express = require("express");
 const Question = require("../models/Question");
 const Submission = require("../models/Submission");
-const { queue } = require("../queue");
+const { jsQueue, javaQueue } = require("../queue");
 const middleware = require("../middleware");
 
 const router = express.Router();
@@ -27,32 +27,49 @@ router.post("/:questionId", middleware, async (req, res) => {
     status: "pending",
   });
 
-  const job = await queue.add("execute", {
-    submissionId: submission._id,
-  });
+  let job;
+
+  if (language === "javascript") {
+    job = await jsQueue.add("execute", {
+      submissionId: submission._id,
+    });
+  } else if (language === "java") {
+    job = await javaQueue.add("execute", {
+      submissionId: submission._id,
+    });
+  }
 
   return res.json({
-    jobId: job.id,
+    submissionId: submission._id,
     status: "processing",
   });
 });
 
-router.get("/:jobId", middleware, async (req, res) => {
-  const job = await queue.getJob(req.params.jobId);
+router.get("/:submissionId", middleware, async (req, res) => {
+  try {
+    const submission = await Submission.findOne({
+      _id: req.params.submissionId,
+      userId: req.userId,
+    });
 
-  if (!job) {
-    return res.status(404).json({
-      message: "Job not found",
+    if (!submission) {
+      return res.status(404).json({
+        message: "Submission not found",
+      });
+    }
+
+    console.log(submission);
+
+    return res.json({
+      submission,
+    });
+  } catch (error) {
+    console.error("Failed to fetch submission:", error);
+
+    return res.status(500).json({
+      message: "Failed to fetch submission",
     });
   }
-
-  console.log(job);
-
-  const submission = await Submission.findById({ _id: job.data.submissionId });
-
-  return res.json({
-    submission,
-  });
 });
 
 router.get("/question/:questionId", middleware, async (req, res) => {

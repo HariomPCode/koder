@@ -3,7 +3,7 @@ const path = require("path");
 
 const { spawn } = require("child_process");
 
-function runCode(jobDir, dockerArgs) {
+function runDocker(jobDir, dockerArgs, time) {
   return new Promise((resolve, reject) => {
     const input = fs.readFileSync(path.join(jobDir, "input.txt"), "utf8");
 
@@ -27,7 +27,7 @@ function runCode(jobDir, dockerArgs) {
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill("SIGKILL");
-    }, 3000);
+    }, time);
 
     child.on("error", (err) => {
       clearTimeout(timer);
@@ -50,4 +50,4 @@ function runCode(jobDir, dockerArgs) {
   });
 }
 
-module.exports = runCode;
+module.exports = runDocker;
