@@ -27,6 +27,7 @@ router.get("/", async (req, res) => {
       difficulty: 1,
       tags: 1,
     })
+    .sort({ questionNum: 1 })
     .skip(skip)
     .limit(limit);
 

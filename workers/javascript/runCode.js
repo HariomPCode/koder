@@ -1,34 +1,13 @@
-const runDocker = require("../common/runDocker");
+const DockerSandbox = require("../common/dockerSandbox");
 
-async function runCode(jobDir) {
-  const dockerPath = jobDir.replace(/\\/g, "/");
-  const dockerArgs = [
-    "run",
-    "-i",
-    "--rm",
-    "--network",
-    "none",
-    "--cap-drop",
-    "ALL",
-    "--security-opt",
-    "no-new-privileges",
-    "--memory=256m",
-    "--cpus=1",
-    "--pids-limit=64",
-    "--read-only",
-    "--tmpfs",
-    "/tmp:size=64m",
-    "--user=1000:1000",
-    "-v",
-    `${dockerPath}:/app:ro`,
-    "-w",
-    "/app",
-    "node:20-alpine",
-    "node",
-    "app.js",
-  ];
-
-  return await runDocker(jobDir, dockerArgs, 3000);
+/**
+ * Executes JavaScript code inside an existing DockerSandbox container.
+ */
+async function runCode(sandbox, options = {}) {
+  if (!(sandbox instanceof DockerSandbox)) {
+    throw new Error("sandbox must be an instance of DockerSandbox");
+  }
+  return await sandbox.exec(["node", "app.js"], options);
 }
 
 module.exports = runCode;

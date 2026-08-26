@@ -5,8 +5,8 @@
   "scripts": {
     "worker:js": "node javascript/worker.js",
     "worker:java": "node java/worker.js",
-    "dev:js": "nodemon javascript/worker.js",
-    "dev:java": "nodemon java/worker.js"
+    "dev:js": "nodemon --ignore common/temp/ javascript/worker.js",
+    "dev:java": "nodemon --ignore common/temp/ java/worker.js"
   },
   "keywords": [],
   "author": "",

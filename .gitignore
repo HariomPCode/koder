@@ -17,8 +17,9 @@ worker/dist/
 *.log
 
 # OS files
-.DS_Store
-Thumbs.db
-
 Dockerfile
 docker-compose.yml
+
+# Worker temporary sandboxes
+workers/common/temp/
+workers/temp/

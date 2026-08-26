@@ -1,59 +1,238 @@
 const fs = require("fs");
 const path = require("path");
-const { performance } = require("perf_hooks");
 
 const { getQuestionDetails } = require("../../backend/db_calls/getDetails");
 const createSandbox = require("../common/createSandbox");
 const cleanupSandbox = require("../common/cleanupSandbox");
-const runCode = require("./runCode");
+const DockerSandbox = require("../common/dockerSandbox");
 const updateSubmission = require("../../backend/db_calls/updateSubmission");
+const { generateJavaScriptRunner } = require("../common/templateGenerator");
+
+// Execution configuration constants
+const PER_TESTCASE_TIMEOUT_MS = 2000;
+const OVERALL_SUBMISSION_TIMEOUT_MS = 45000;
+const DEFAULT_BATCH_SIZE = 50; // Balance between speed and bounded state isolation
+const MAX_OUTPUT_BUFFER_BYTES = 5 * 1024 * 1024; // 5 MB
+
+function compareOutputs(actual, expected) {
+  if (actual === expected) return true;
+  const normActual = (actual || "").trim().replace(/\r\n/g, "\n");
+  const normExpected = (expected || "").trim().replace(/\r\n/g, "\n");
+  if (normActual === normExpected) return true;
+
+  try {
+    const jsonActual = JSON.parse(normActual);
+    const jsonExpected = JSON.parse(normExpected);
+    if (JSON.stringify(jsonActual) === JSON.stringify(jsonExpected)) return true;
+  } catch (_) {}
+
+  if (
+    normActual.toLowerCase() === normExpected.toLowerCase() &&
+    (normActual.toLowerCase() === "true" || normActual.toLowerCase() === "false")
+  ) {
+    return true;
+  }
+
+  const arrActual = normActual.replace(/^[\[\(\{]|[\]\)\}]$/g, "").split(/[,\s]+/).filter(Boolean);
+  const arrExpected = normExpected.replace(/^[\[\(\{]|[\]\)\}]$/g, "").split(/[,\s]+/).filter(Boolean);
+  if (arrActual.length > 0 && arrActual.length === arrExpected.length) {
+    if (arrActual.every((val, idx) => val === arrExpected[idx])) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 async function executor(job) {
   const { submissionId } = job.data;
 
-  const { language, code, testcases, slug } =
+  const { language, code, testcases, slug, functionName, parameters, returnType } =
     await getQuestionDetails(submissionId);
 
   if (language !== "javascript") {
-    throw new Error("Unsupported language");
+    throw new Error("Unsupported language for JavaScript worker");
   }
 
   const jobDir = createSandbox(job.id);
+  const jsFile = path.join(jobDir, "app.js");
 
-  const jsFile = path.join(jobDir, "main.js");
-  const inputFile = path.join(jobDir, "input.txt");
-
-  const total = testcases.length;
+  const total = testcases ? testcases.length : 0;
   let passed = 0;
   let totalRuntime = 0;
   let maxRuntime = 0;
   let result = null;
 
-  try {
-    const template = fs.readFileSync(
-      path.join(__dirname, "templates/javascript", `${slug}.js`),
-      "utf8",
-    );
+  // Single Docker sandbox container for this entire submission
+  const sandbox = new DockerSandbox({
+    jobId: job.id,
+    jobDir,
+    image: "node:20-alpine",
+    readOnly: true,
+  });
 
-    const finalCode = template.replace("/***USER_CODE***/", code);
+  try {
+    let finalCode = "";
+
+    if (functionName && parameters && parameters.length > 0) {
+      finalCode = generateJavaScriptRunner(
+        { functionName, parameters, returnType, slug },
+        code,
+      );
+    } else {
+      const templatePath = path.resolve(
+        __dirname,
+        "../templates/javascript",
+        `${slug}.js`,
+      );
+
+      if (fs.existsSync(templatePath)) {
+        const template = fs.readFileSync(templatePath, "utf8");
+        finalCode = template.replace("/***USER_CODE***/", code);
+      } else if (functionName) {
+        finalCode = generateJavaScriptRunner(
+          { functionName, parameters: parameters || [], returnType, slug },
+          code,
+        );
+      } else {
+        throw new Error(`Template not found for problem slug: ${slug}`);
+      }
+    }
+
     fs.writeFileSync(jsFile, finalCode, "utf8");
 
-    for (const testcase of testcases) {
-      // Create / overwrite input.txt for this testcase
-      fs.writeFileSync(inputFile, testcase.input, "utf8");
+    // Start ONE isolated Docker container for the entire submission
+    await sandbox.start();
 
-      const start = performance.now();
+    const submissionDeadline = Date.now() + OVERALL_SUBMISSION_TIMEOUT_MS;
+    const batchSize = Math.max(1, DEFAULT_BATCH_SIZE);
 
-      try {
-        // runCode will read input.txt and feed it to stdin
-        const output = await runCode(jobDir);
+    for (let i = 0; i < total; i += batchSize) {
+      if (Date.now() >= submissionDeadline) {
+        result = {
+          status: "completed",
+          verdict: "Time Limit Exceeded",
+          passed,
+          total,
+          totalRuntime: Math.round(totalRuntime),
+          maxRuntime: Math.round(maxRuntime),
+          memory: 0,
+          failedTestCase: {
+            input: testcases[i].input,
+            expected: testcases[i].output,
+          },
+          errorMessage: "Overall submission execution time limit exceeded",
+        };
+        break;
+      }
 
-        const runtime = performance.now() - start;
+      const currentBatch = testcases.slice(i, i + batchSize).map((tc, idx) => ({
+        id: i + idx,
+        input: tc.input,
+        output: tc.output,
+      }));
 
-        totalRuntime += runtime;
-        maxRuntime = Math.max(maxRuntime, runtime);
+      // Execute interactive streaming batch with true per-testcase watchdogs
+      const batchResult = await sandbox.runInteractiveBatch(
+        ["node", "app.js"],
+        currentBatch,
+        {
+          perTestTimeoutMs: PER_TESTCASE_TIMEOUT_MS,
+          overallDeadline: submissionDeadline,
+          maxBuffer: MAX_OUTPUT_BUFFER_BYTES,
+        },
+      );
 
-        if (output.trim() !== testcase.output.trim()) {
+      // Evaluate each testcase in the batch in order
+      for (let j = 0; j < currentBatch.length; j++) {
+        const tc = currentBatch[j];
+
+        // 1. Time Limit Exceeded on this test case
+        if (batchResult.timedOutTestCaseId === tc.id) {
+          result = {
+            status: "completed",
+            verdict: "Time Limit Exceeded",
+            passed,
+            total,
+            totalRuntime: Math.round(totalRuntime),
+            maxRuntime: Math.round(maxRuntime),
+            memory: 0,
+            failedTestCase: {
+              input: tc.input,
+              expected: tc.output,
+            },
+            errorMessage: batchResult.overallTimedOut
+              ? "Overall submission execution time limit exceeded"
+              : "Time Limit Exceeded",
+          };
+          break;
+        }
+
+        // 2. Process crashed or exited unexpectedly on this test case
+        if (batchResult.crashedTestCaseId === tc.id && !batchResult.results.has(tc.id)) {
+          result = {
+            status: "completed",
+            verdict: "Runtime Error",
+            passed,
+            total,
+            totalRuntime: Math.round(totalRuntime),
+            maxRuntime: Math.round(maxRuntime),
+            memory: 0,
+            failedTestCase: {
+              input: tc.input,
+              expected: tc.output,
+            },
+            errorMessage: batchResult.stderr || "Process exited unexpectedly",
+          };
+          break;
+        }
+
+        const tcRes = batchResult.results.get(tc.id);
+        if (!tcRes) {
+          result = {
+            status: "completed",
+            verdict: "Runtime Error",
+            passed,
+            total,
+            totalRuntime: Math.round(totalRuntime),
+            maxRuntime: Math.round(maxRuntime),
+            memory: 0,
+            failedTestCase: {
+              input: tc.input,
+              expected: tc.output,
+            },
+            errorMessage: "No response received for test case",
+          };
+          break;
+        }
+
+        totalRuntime += tcRes.runtimeMs;
+        maxRuntime = Math.max(maxRuntime, tcRes.runtimeMs);
+
+        // 3. User exception during test case
+        if (tcRes.status !== "OK") {
+          result = {
+            status: "completed",
+            verdict: "Runtime Error",
+            passed,
+            total,
+            totalRuntime: Math.round(totalRuntime),
+            maxRuntime: Math.round(maxRuntime),
+            memory: 0,
+            failedTestCase: {
+              input: tc.input,
+              expected: tc.output,
+            },
+            errorMessage: tcRes.error || "Runtime Error",
+          };
+          break;
+        }
+
+        // 4. Output validation
+        const actualOutput = tcRes.output || "";
+        const expectedOutput = tc.output || "";
+
+        if (!compareOutputs(actualOutput, expectedOutput)) {
           result = {
             status: "completed",
             verdict: "Wrong Answer",
@@ -63,37 +242,25 @@ async function executor(job) {
             maxRuntime: Math.round(maxRuntime),
             memory: 0,
             failedTestCase: {
-              input: testcase.input,
-              expected: testcase.output,
-              received: output.trim(),
+              input: tc.input,
+              expected: tc.output,
+              received: tcRes.output.trim(),
             },
             errorMessage: null,
           };
-
           break;
         }
 
         passed++;
-      } catch (err) {
-        result = {
-          status: "completed",
-          verdict: "Runtime Error",
-          passed,
-          total,
-          totalRuntime: Math.round(totalRuntime),
-          maxRuntime: Math.round(maxRuntime),
-          memory: 0,
-          failedTestCase: {
-            input: testcase.input,
-            expected: testcase.output,
-          },
-          errorMessage: err.message,
-        };
+      }
 
+      // If any failure occurred in this batch, stop processing further batches
+      if (result) {
         break;
       }
     }
 
+    // All testcases passed
     if (!result) {
       result = {
         status: "completed",
@@ -110,6 +277,8 @@ async function executor(job) {
 
     return await updateSubmission(submissionId, result);
   } finally {
+    // Always cleanly destroy the Docker container and remove temp workspace
+    await sandbox.destroy();
     cleanupSandbox(jobDir);
   }
 }

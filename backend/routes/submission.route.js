@@ -15,7 +15,7 @@ router.post("/:questionId", middleware, async (req, res) => {
 
   if (!question) {
     return res.json({
-      messgae: "Question does not exist",
+      message: "Question does not exist",
     });
   }
 

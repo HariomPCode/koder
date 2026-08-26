@@ -1,6 +1,7 @@
 const express = require("express");
 const Question = require("../models/Question");
 const User = require("../models/User");
+const { generateStarterCode } = require("../../workers/common/templateGenerator");
 
 const router = express.Router();
 
@@ -11,7 +12,7 @@ router.get("/users", async (req, res) => {
 });
 
 router.get("/questions", async (req, res) => {
-  const questions = await Question.find({}).limit(100);
+  const questions = await Question.find({}).sort({ questionNum: 1 }).limit(100);
 
   if (questions.length === 0) {
     return res.status(404).json({
@@ -30,7 +31,7 @@ router.get("/questions/:questionId", async (req, res) => {
   const question = await Question.findById(questionId);
 
   if (!question) {
-    return res.json({
+    return res.status(404).json({
       message: "Question not found",
     });
   }
@@ -41,20 +42,91 @@ router.get("/questions/:questionId", async (req, res) => {
 });
 
 router.post("/questions", async (req, res) => {
-  const data = req.body;
-  data.slug = data.slug.trim().toLowerCase();
+  try {
+    const data = req.body;
+    if (data.slug) {
+      data.slug = data.slug.trim().toLowerCase();
+    } else if (data.title) {
+      data.slug = data.title
+        .trim()
+        .toLowerCase()
+        .replace(/[^\w\s-]/g, "")
+        .replace(/[\s_-]+/g, "-");
+    }
 
-  const question = await Question.create(data);
+    if (!data.questionNum) {
+      const lastQ = await Question.findOne().sort({ questionNum: -1 });
+      data.questionNum = lastQ ? lastQ.questionNum + 1 : 1;
+    }
 
-  if (!question) {
-    return res.json({
-      message: "something went wrong",
+    if (
+      (!data.starterCode || data.starterCode.length === 0) &&
+      data.functionName &&
+      data.parameters
+    ) {
+      data.starterCode = generateStarterCode({
+        functionName: data.functionName,
+        parameters: data.parameters,
+        returnType: data.returnType,
+      });
+    }
+
+    const question = await Question.create(data);
+
+    return res.status(201).json({
+      message: "Question created successfully",
+      question,
+    });
+  } catch (err) {
+    return res.status(400).json({
+      message: "Failed to create question",
+      error: err.message,
     });
   }
+});
 
-  return res.json({
-    question,
-  });
+router.put("/questions/:questionId", async (req, res) => {
+  try {
+    const { questionId } = req.params;
+    const data = req.body;
+
+    if (data.slug) {
+      data.slug = data.slug.trim().toLowerCase();
+    }
+
+    if (
+      (!data.starterCode || data.starterCode.length === 0) &&
+      data.functionName &&
+      data.parameters
+    ) {
+      data.starterCode = generateStarterCode({
+        functionName: data.functionName,
+        parameters: data.parameters,
+        returnType: data.returnType,
+      });
+    }
+
+    const question = await Question.findByIdAndUpdate(questionId, data, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!question) {
+      return res.status(404).json({
+        message: "Question not found",
+      });
+    }
+
+    return res.json({
+      message: "Question updated successfully",
+      question,
+    });
+  } catch (err) {
+    return res.status(400).json({
+      message: "Failed to update question",
+      error: err.message,
+    });
+  }
 });
 
 router.delete("/questions/:questionId", async (req, res) => {

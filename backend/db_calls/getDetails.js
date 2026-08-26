@@ -19,6 +19,9 @@ async function getQuestionDetails(submissionId) {
     code: submission.code,
     testcases: [...question.sampleTestCases, ...question.hiddenTestCases],
     slug: question.slug,
+    functionName: question.functionName,
+    parameters: question.parameters || [],
+    returnType: question.returnType,
   };
 }
 

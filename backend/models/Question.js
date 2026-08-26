@@ -48,7 +48,7 @@ const questionSchema = new mongoose.Schema(
       {
         language: {
           type: String,
-          enum: ["javascript", "java", "python"],
+          enum: ["javascript", "java", "python", "cpp"],
           required: true,
         },
         code: {
@@ -62,6 +62,20 @@ const questionSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+
+    parameters: [
+      {
+        name: {
+          type: String,
+          required: true,
+        },
+        type: {
+          type: String,
+          required: true,
+        },
+        _id: false,
+      },
+    ],
 
     returnType: {
       type: String,

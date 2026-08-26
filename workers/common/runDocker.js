@@ -38,7 +38,9 @@ function runDocker(jobDir, dockerArgs, time) {
       clearTimeout(timer);
 
       if (timedOut) {
-        return reject(new Error("Time Limit Exceeded"));
+        const error = new Error("Time Limit Exceeded");
+        error.code = "TLE";
+        return reject(error);
       }
 
       if (code !== 0) {
