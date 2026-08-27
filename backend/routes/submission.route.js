@@ -7,7 +7,8 @@ const {
   SUPPORTED_LANGUAGES,
   isSupportedLanguage,
   normalizeLanguage,
-} = require("../config/languages");
+} = require("@koder/shared");
+
 
 const router = express.Router();
 

@@ -1,7 +1,10 @@
+const path = require("path");
 const express = require("express");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
-require("dotenv").config();
+require("dotenv").config({
+  path: path.resolve(__dirname, "../.env"),
+});
 
 const { queue } = require("./queue");
 const connectDB = require("./db");

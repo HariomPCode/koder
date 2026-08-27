@@ -2,8 +2,9 @@ const mongoose = require("mongoose");
 const path = require("path");
 require("dotenv").config({ path: path.resolve(__dirname, ".env") });
 
-const Question = require("./models/Question");
-const { generateStarterCode } = require("../workers/common/templateGenerator");
+const { Question, generateStarterCode } = require("@koder/shared");
+
+
 
 const problemsData = [
   {

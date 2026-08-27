@@ -1,12 +1,15 @@
 const fs = require("fs");
 const path = require("path");
 
-const { getQuestionDetails } = require("../../backend/db_calls/getDetails");
+const {
+  getQuestionDetails,
+  updateSubmission,
+  generateJavaRunner,
+} = require("@koder/shared");
 const createSandbox = require("../common/createSandbox");
 const cleanupSandbox = require("../common/cleanupSandbox");
 const DockerSandbox = require("../common/dockerSandbox");
-const updateSubmission = require("../../backend/db_calls/updateSubmission");
-const { generateJavaRunner } = require("../common/templateGenerator");
+
 
 // Execution configuration constants
 const COMPILATION_TIMEOUT_MS = 25000;

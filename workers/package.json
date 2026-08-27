@@ -1,7 +1,7 @@
 {
   "name": "worker",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "javascript/worker.js",
   "scripts": {
     "worker:js": "node javascript/worker.js",
     "worker:java": "node java/worker.js",
@@ -13,9 +13,12 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@koder/shared": "*",
     "bullmq": "^5.79.2",
     "dotenv": "^17.4.2",
     "ioredis": "^5.11.1",
+    "mongoose": "^9.7.3",
     "nodemon": "^3.1.14"
   }
 }
+

@@ -1,0 +1,9 @@
+{
+  "name": "@koder/shared",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "ISC",
+  "dependencies": {
+    "mongoose": "^9.7.3"
+  }
+}

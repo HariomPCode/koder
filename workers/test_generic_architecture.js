@@ -1,12 +1,21 @@
-const path = require("path");
-const mongoose = require("../backend/node_modules/mongoose");
-require("../backend/node_modules/dotenv").config({ path: path.resolve(__dirname, "../backend/.env") });
+const mongoose = require("mongoose");
+const dotenv = require("dotenv");
 
-const Question = require("../backend/models/Question");
-const Submission = require("../backend/models/Submission");
-const User = require("../backend/models/User");
+dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, "../.env") });
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+
+const { Question, Submission } = require("@koder/shared");
+const User = mongoose.models.User || mongoose.model("User", new mongoose.Schema({
+  firstName: String,
+  lastName: String,
+  email: String,
+  password: String,
+  role: { type: String, default: "user" }
+}));
 const jsExecutor = require("./javascript/executor");
 const javaExecutor = require("./java/executor");
+
 
 async function runGenericArchitectureTests() {
   console.log("=======================================================================");

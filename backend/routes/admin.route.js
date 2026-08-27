@@ -2,11 +2,12 @@ const express = require("express");
 const Question = require("../models/Question");
 const User = require("../models/User");
 const { authMiddleware, adminMiddleware } = require("../middleware");
-const { generateStarterCode } = require("../../workers/common/templateGenerator");
 const {
+  generateStarterCode,
   SUPPORTED_LANGUAGES,
   isSupportedLanguage,
-} = require("../config/languages");
+} = require("@koder/shared");
+
 
 const router = express.Router();
 

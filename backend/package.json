@@ -1,9 +1,11 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
-    "test": "node test_admin_security.js && node test_language_contract.js",
+    "start": "node server.js",
+    "test": "node test_admin_security.js && node test_language_contract.js && node test_workspace_boundary.js",
+
     "dev": "nodemon server.js"
   },
   "keywords": [],
@@ -11,6 +13,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@koder/shared": "*",
     "bcrypt": "^6.0.0",
     "bullmq": "^5.79.2",
     "cookie-parser": "^1.4.7",
@@ -24,3 +27,4 @@
     "redis": "^6.0.1"
   }
 }
+

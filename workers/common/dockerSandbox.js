@@ -1,7 +1,8 @@
 const { spawn } = require("child_process");
 const { performance } = require("perf_hooks");
 const readline = require("readline");
-const { encodeRequest, decodeResponse } = require("./protocol");
+const { encodeRequest, decodeResponse } = require("@koder/shared");
+
 
 /**
  * DockerSandbox manages the lifecycle of a single Docker container for an entire submission.

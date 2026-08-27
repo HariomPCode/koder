@@ -47,7 +47,8 @@ const Question = require("./models/Question");
 const User = require("./models/User");
 const submissionRoute = require("./routes/submission.route");
 const adminRoute = require("./routes/admin.route");
-const { generateStarterCode } = require("../workers/common/templateGenerator");
+const { generateStarterCode } = require("@koder/shared");
+
 
 async function runTests() {
   console.log("=======================================================================");

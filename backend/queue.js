@@ -1,17 +1,15 @@
 const IoRedis = require("ioredis");
 const { Queue } = require("bullmq");
+const { QUEUE_NAMES, getRedisConfig } = require("@koder/shared");
 
-const connection = new IoRedis({
-  host: process.env.REDIS_HOST || "localhost",
-  port: Number(process.env.REDIS_PORT) || 6379,
-  maxRetriesPerRequest: null,
-});
+const connection = new IoRedis(getRedisConfig());
 
-const jsQueue = new Queue("js-queue", { connection });
-const javaQueue = new Queue("java-queue", { connection });
+const jsQueue = new Queue(QUEUE_NAMES.javascript, { connection });
+const javaQueue = new Queue(QUEUE_NAMES.java, { connection });
 
 module.exports = {
   connection,
   jsQueue,
   javaQueue,
 };
+

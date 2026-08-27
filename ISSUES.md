@@ -143,7 +143,8 @@ Immediate/small fix: remove `"cpp"` and `"python"` from the frontend `<select>` 
 
 **Area:** Architecture / Backend / Workers
 
-**Status:** Open
+**Status:** Done
+
 
 **Current State**
 

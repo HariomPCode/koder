@@ -1,17 +1,26 @@
 # Dependencies
+node_modules/
 frontend/node_modules/
 backend/node_modules/
 worker*/node_modules/
+packages/*/node_modules/
+
 
 # Environment files
+.env
+.env.*
+!.env.example
+
 frontend/.env*
 backend/.env*
-worker/.env*
+workers/.env*
 
 # Build outputs
 frontend/.next/
 backend/dist/
 worker/dist/
+*.tsbuildinfo
+
 
 # Logs
 *.log

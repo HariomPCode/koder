@@ -1,19 +1,21 @@
 const path = require("path");
+const dotenv = require("dotenv");
 
-require("dotenv").config({
-  path: path.resolve(__dirname, "../../backend/.env"),
+dotenv.config({
+  path: path.resolve(__dirname, "../../.env"),
 });
 
-const connectDB = require("../../backend/db");
 const { Worker } = require("bullmq");
-const { connection } = require("../../backend/queue");
-
-const updateSubmission = require("../../backend/db_calls/updateSubmission");
+const IoRedis = require("ioredis");
+const { getRedisConfig, updateSubmission } = require("@koder/shared");
+const connectDB = require("./db");
 
 async function createWorker(queueName, processor) {
   await connectDB();
 
   console.log(`Worker connected to MongoDB`);
+
+  const connection = new IoRedis(getRedisConfig());
 
   const worker = new Worker(queueName, processor, {
     connection,

@@ -1,0 +1,16 @@
+{
+  "name": "koder-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "backend",
+    "workers"
+  ],
+  "scripts": {
+    "test": "npm run test --workspace=backend",
+    "dev:backend": "npm run dev --workspace=backend",
+    "worker:js": "npm run worker:js --workspace=workers",
+    "worker:java": "npm run worker:java --workspace=workers"
+  }
+}
