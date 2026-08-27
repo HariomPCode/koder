@@ -187,7 +187,7 @@ Adopt **npm/yarn workspaces** (not a full monorepo toolchain like Nx/Turborepo â
 
 **Area:** Frontend / Backend contract
 
-**Status:** Open
+**Status:** Done
 
 **Current State**
 

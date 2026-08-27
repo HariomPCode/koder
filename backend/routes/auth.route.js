@@ -4,6 +4,14 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const router = express.Router();
 
+const authCookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  path: "/",
+  maxAge: 30 * 24 * 60 * 60 * 1000,
+};
+
 router.post("/signup", async (req, res) => {
   const { firstName, lastName, email, password } = req.body;
 
@@ -37,12 +45,7 @@ router.post("/signup", async (req, res) => {
     { expiresIn: "30d" },
   );
 
-  res.cookie("auth_token", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    maxAge: 30 * 24 * 60 * 60 * 1000,
-  });
+  res.cookie("auth_token", token, authCookieOptions);
 
   return res.json({
     message: "User Created Successfully",
@@ -80,12 +83,7 @@ router.post("/signin", async (req, res) => {
     { expiresIn: "30d" },
   );
 
-  res.cookie("auth_token", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    maxAge: 30 * 24 * 60 * 60 * 1000,
-  });
+  res.cookie("auth_token", token, authCookieOptions);
 
   return res.json({
     message: "User signed in successfully",
@@ -95,6 +93,9 @@ router.post("/signin", async (req, res) => {
 router.post("/signout", (req, res) => {
   res.clearCookie("auth_token", {
     httpOnly: true,
+    secure: authCookieOptions.secure,
+    sameSite: authCookieOptions.sameSite,
+    path: authCookieOptions.path,
   });
 
   return res.json({
