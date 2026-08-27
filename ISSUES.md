@@ -226,7 +226,7 @@ Change the frontend call to `${backend}/api/v1/auth/signout`. This is a one-line
 
 **Area:** Workers / Architecture
 
-**Status:** Open
+**Status:** Done
 
 **Current State**
 

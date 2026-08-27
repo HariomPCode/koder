@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "javascript/worker.js",
   "scripts": {
+    "test": "node test_execution_engine.js",
     "worker:js": "node javascript/worker.js",
     "worker:java": "node java/worker.js",
     "dev:js": "nodemon --ignore common/temp/ javascript/worker.js",
@@ -21,4 +22,3 @@
     "nodemon": "^3.1.14"
   }
 }
-
