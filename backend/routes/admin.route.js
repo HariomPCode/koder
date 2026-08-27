@@ -1,14 +1,25 @@
 const express = require("express");
 const Question = require("../models/Question");
 const User = require("../models/User");
+const { authMiddleware, adminMiddleware } = require("../middleware");
 const { generateStarterCode } = require("../../workers/common/templateGenerator");
 
 const router = express.Router();
 
-router.get("/users", async (req, res) => {
-  const users = await User.find({});
+router.use(authMiddleware);
+router.use(adminMiddleware);
 
-  return res.json({ users });
+router.get("/users", async (req, res) => {
+  try {
+    const users = await User.find({}).select({ password: 0 });
+
+    return res.json({ users });
+  } catch (error) {
+    console.error("Failed to fetch users:", error.message);
+    return res.status(500).json({
+      message: "Failed to fetch users",
+    });
+  }
 });
 
 router.get("/questions", async (req, res) => {

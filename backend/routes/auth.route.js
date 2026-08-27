@@ -28,6 +28,7 @@ router.post("/signup", async (req, res) => {
     lastName,
     email,
     password: hashedPassword,
+    role: "user",
   });
 
   const token = await jwt.sign(
