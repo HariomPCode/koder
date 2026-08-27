@@ -14,16 +14,13 @@ const router = express.Router();
 router.use(authMiddleware);
 router.use(adminMiddleware);
 
-router.get("/users", async (req, res) => {
+router.get("/users", async (req, res, next) => {
   try {
     const users = await User.find({}).select({ password: 0 });
 
     return res.json({ users });
   } catch (error) {
-    console.error("Failed to fetch users:", error.message);
-    return res.status(500).json({
-      message: "Failed to fetch users",
-    });
+    return next(error);
   }
 });
 
@@ -57,7 +54,7 @@ router.get("/questions/:questionId", async (req, res) => {
   });
 });
 
-router.post("/questions", async (req, res) => {
+router.post("/questions", async (req, res, next) => {
   try {
     const data = req.body;
     if (data.slug) {
@@ -109,14 +106,11 @@ router.post("/questions", async (req, res) => {
       question,
     });
   } catch (err) {
-    return res.status(400).json({
-      message: "Failed to create question",
-      error: err.message,
-    });
+    return next(err);
   }
 });
 
-router.put("/questions/:questionId", async (req, res) => {
+router.put("/questions/:questionId", async (req, res, next) => {
   try {
     const { questionId } = req.params;
     const data = req.body;
@@ -168,14 +162,11 @@ router.put("/questions/:questionId", async (req, res) => {
       question,
     });
   } catch (err) {
-    return res.status(400).json({
-      message: "Failed to update question",
-      error: err.message,
-    });
+    return next(err);
   }
 });
 
-router.delete("/questions/:questionId", async (req, res) => {
+router.delete("/questions/:questionId", async (req, res, next) => {
   try {
     const { questionId } = req.params;
 
@@ -193,10 +184,7 @@ router.delete("/questions/:questionId", async (req, res) => {
       message: "Question deleted successfully",
     });
   } catch (err) {
-    return res.status(500).json({
-      message: "Unable to process your request",
-      error: err.message,
-    });
+    return next(err);
   }
 });
 

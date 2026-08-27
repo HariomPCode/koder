@@ -48,10 +48,7 @@ async function adminMiddleware(req, res, next) {
     req.user = user;
     next();
   } catch (error) {
-    console.error("Admin Authorization Error:", error.message);
-    return res.status(500).json({
-      message: "Authorization check failed",
-    });
+    return next(error);
   }
 }
 

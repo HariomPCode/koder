@@ -17,7 +17,7 @@ const LANGUAGE_QUEUES = {
   java: javaQueue,
 };
 
-router.post("/:questionId", middleware, async (req, res) => {
+router.post("/:questionId", middleware, async (req, res, next) => {
   try {
     const { language, code } = req.body;
     const userId = req.userId;
@@ -69,14 +69,11 @@ router.post("/:questionId", middleware, async (req, res) => {
       status: "processing",
     });
   } catch (error) {
-    console.error("Submission creation failed:", error);
-    return res.status(500).json({
-      message: "Failed to process submission",
-    });
+    return next(error);
   }
 });
 
-router.get("/:submissionId", middleware, async (req, res) => {
+router.get("/:submissionId", middleware, async (req, res, next) => {
   try {
     const submission = await Submission.findOne({
       _id: req.params.submissionId,
@@ -95,11 +92,7 @@ router.get("/:submissionId", middleware, async (req, res) => {
       submission,
     });
   } catch (error) {
-    console.error("Failed to fetch submission:", error);
-
-    return res.status(500).json({
-      message: "Failed to fetch submission",
-    });
+    return next(error);
   }
 });
 

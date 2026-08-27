@@ -24,7 +24,7 @@ router.get("/", middleware, async (req, res) => {
   });
 });
 
-router.get("/stats", middleware, async (req, res) => {
+router.get("/stats", middleware, async (req, res, next) => {
   try {
     const userId = req.userId;
 
@@ -92,11 +92,7 @@ router.get("/stats", middleware, async (req, res) => {
       solvedQuestions: [...solvedQuestions],
     });
   } catch (error) {
-    console.error(error);
-
-    return res.status(500).json({
-      message: "Failed to fetch user statistics.",
-    });
+    return next(error);
   }
 });
 

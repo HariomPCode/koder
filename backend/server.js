@@ -1,30 +1,11 @@
 const path = require("path");
-const express = require("express");
-const cookieParser = require("cookie-parser");
-const cors = require("cors");
 require("dotenv").config({
   path: path.resolve(__dirname, "../.env"),
 });
 
-const { queue } = require("./queue");
 const connectDB = require("./db");
-const apiRoute = require("./routes/apiRoute");
-const adminRoute = require("./routes/admin.route");
-
-const app = express();
-
-app.use(
-  cors({
-    origin: "http://localhost:3000",
-    credentials: true,
-  }),
-);
-
-app.use(express.json());
-app.use(cookieParser());
-
-app.use("/api/v1", apiRoute);
-app.use("/admin", adminRoute);
+const createApp = require("./app");
+const app = createApp();
 
 async function startServer() {
   await connectDB();
@@ -34,4 +15,8 @@ async function startServer() {
   });
 }
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = app;
