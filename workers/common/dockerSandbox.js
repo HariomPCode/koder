@@ -256,6 +256,18 @@ class DockerSandbox {
 
     let currentResponseResolver = null;
 
+    child.stdin.on("error", (error) => {
+      if (!stderr) {
+        stderr = error.message;
+      }
+      isProcessExited = true;
+      if (currentResponseResolver) {
+        const resolver = currentResponseResolver;
+        currentResponseResolver = null;
+        resolver(null);
+      }
+    });
+
     rl.on("line", (line) => {
       const resp = decodeResponse(line);
       if (resp && currentResponseResolver) {
@@ -304,9 +316,22 @@ class DockerSandbox {
         const requestLine = encodeRequest(tc.id, tc.input);
 
         // Send testcase to runner process stdin
+        if (
+          isProcessExited ||
+          child.stdin.destroyed ||
+          child.stdin.writableEnded
+        ) {
+          crashedTestCaseId = tc.id;
+          break;
+        }
+
         try {
           child.stdin.write(requestLine);
-        } catch (_) {
+        } catch (error) {
+          if (!stderr) {
+            stderr = error.message;
+          }
+          isProcessExited = true;
           crashedTestCaseId = tc.id;
           break;
         }
@@ -320,6 +345,7 @@ class DockerSandbox {
           watchdogTimer = setTimeout(async () => {
             isTimedOut = true;
             timedOutTestCaseId = tc.id;
+            isProcessExited = true;
             try {
               child.kill("SIGKILL");
             } catch (_) {}
@@ -369,12 +395,20 @@ class DockerSandbox {
       }
     } finally {
       // Graceful shutdown: send EXIT signal
-      try {
-        if (!isProcessExited) {
+      if (
+        !isProcessExited &&
+        !child.stdin.destroyed &&
+        !child.stdin.writableEnded
+      ) {
+        try {
           child.stdin.write("EXIT\n");
           child.stdin.end();
+        } catch (error) {
+          if (!stderr) {
+            stderr = error.message;
+          }
         }
-      } catch (_) {}
+      }
 
       // Hard kill any lingering child processes in container
       try {
