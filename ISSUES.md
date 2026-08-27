@@ -265,7 +265,7 @@ Extract a single `runSubmission({ image, readOnly, compileCommand, execCommand, 
 
 **Area:** Workers / Maintainability
 
-**Status:** Open
+**Status:** Done
 
 **Current State**
 

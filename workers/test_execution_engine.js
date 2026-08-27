@@ -3,8 +3,21 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
+const workerFactoryPath = require.resolve("./common/workerFactory");
+const workerRegistrations = [];
+require.cache[workerFactoryPath] = {
+  id: workerFactoryPath,
+  filename: workerFactoryPath,
+  loaded: true,
+  exports: (queueName, processor) => {
+    workerRegistrations.push({ queueName, processor });
+  },
+};
+
 const jsExecutor = require("./javascript/executor");
 const javaExecutor = require("./java/executor");
+require("./javascript/worker");
+require("./java/worker");
 const {
   createExecutionExecutor,
   compareOutputs,
@@ -119,6 +132,39 @@ async function testLanguageExecutor(name, executor, expectedCommand) {
 }
 
 async function runTests() {
+  assert.deepStrictEqual(
+    workerRegistrations.map((registration) => registration.queueName),
+    ["js-queue", "java-queue"],
+  );
+  assert.strictEqual(typeof workerRegistrations[0].processor, "function");
+  assert.strictEqual(typeof workerRegistrations[1].processor, "function");
+
+  const candidateFiles = [
+    "common/runDocker.js",
+    "javascript/runCode.js",
+    "java/runCode.js",
+    "java/compileCode.js",
+  ];
+  for (const candidate of candidateFiles) {
+    assert.strictEqual(
+      fs.existsSync(path.join(__dirname, candidate)),
+      false,
+      `${candidate} should be removed`,
+    );
+  }
+
+  for (const directory of ["common", "javascript", "java"]) {
+    const directoryPath = path.join(__dirname, directory);
+    for (const filename of fs.readdirSync(directoryPath)) {
+      if (!filename.endsWith(".js") || filename.startsWith("test")) continue;
+      const source = fs.readFileSync(path.join(directoryPath, filename), "utf8");
+      assert.ok(
+        !/(runDocker|runCode|compileCode)/.test(source),
+        `${directory}/${filename} references removed execution helpers`,
+      );
+    }
+  }
+
   assert.strictEqual(compareOutputs("[1, 2]", "[1,2]"), true);
   assert.strictEqual(compareOutputs("false", "False"), true);
 
