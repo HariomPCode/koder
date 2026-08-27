@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "node test_admin_security.js",
+    "test": "node test_admin_security.js && node test_language_contract.js",
     "dev": "nodemon server.js"
   },
   "keywords": [],

@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { SUPPORTED_LANGUAGES } = require("../config/languages");
 
 const testCaseSchema = new mongoose.Schema(
   {
@@ -48,7 +49,7 @@ const questionSchema = new mongoose.Schema(
       {
         language: {
           type: String,
-          enum: ["javascript", "java", "python", "cpp"],
+          enum: SUPPORTED_LANGUAGES,
           required: true,
         },
         code: {

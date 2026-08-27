@@ -3,46 +3,76 @@ const Question = require("../models/Question");
 const Submission = require("../models/Submission");
 const { jsQueue, javaQueue } = require("../queue");
 const middleware = require("../middleware");
+const {
+  SUPPORTED_LANGUAGES,
+  isSupportedLanguage,
+  normalizeLanguage,
+} = require("../config/languages");
 
 const router = express.Router();
 
+const LANGUAGE_QUEUES = {
+  javascript: jsQueue,
+  java: javaQueue,
+};
+
 router.post("/:questionId", middleware, async (req, res) => {
-  const { language, code } = req.body;
-  const userId = req.userId;
-  const questionId = req.params.questionId;
+  try {
+    const { language, code } = req.body;
+    const userId = req.userId;
+    const questionId = req.params.questionId;
 
-  const question = await Question.findOne({ _id: questionId });
+    if (!language || !isSupportedLanguage(language)) {
+      return res.status(400).json({
+        message: `Unsupported language: '${language}'. Supported languages are: ${SUPPORTED_LANGUAGES.join(", ")}`,
+      });
+    }
 
-  if (!question) {
-    return res.json({
-      message: "Question does not exist",
+    if (!code || typeof code !== "string" || !code.trim()) {
+      return res.status(400).json({
+        message: "Code is required",
+      });
+    }
+
+    const normalizedLang = normalizeLanguage(language);
+
+    const question = await Question.findById(questionId);
+
+    if (!question) {
+      return res.status(404).json({
+        message: "Question does not exist",
+      });
+    }
+
+    const targetQueue = LANGUAGE_QUEUES[normalizedLang];
+    if (!targetQueue) {
+      return res.status(400).json({
+        message: `No queue configured for language: ${normalizedLang}`,
+      });
+    }
+
+    const submission = await Submission.create({
+      userId,
+      questionId,
+      code,
+      language: normalizedLang,
+      status: "pending",
     });
-  }
 
-  const submission = await Submission.create({
-    userId,
-    questionId,
-    code,
-    language,
-    status: "pending",
-  });
-
-  let job;
-
-  if (language === "javascript") {
-    job = await jsQueue.add("execute", {
+    await targetQueue.add("execute", {
       submissionId: submission._id,
     });
-  } else if (language === "java") {
-    job = await javaQueue.add("execute", {
+
+    return res.status(200).json({
       submissionId: submission._id,
+      status: "processing",
+    });
+  } catch (error) {
+    console.error("Submission creation failed:", error);
+    return res.status(500).json({
+      message: "Failed to process submission",
     });
   }
-
-  return res.json({
-    submissionId: submission._id,
-    status: "processing",
-  });
 });
 
 router.get("/:submissionId", middleware, async (req, res) => {

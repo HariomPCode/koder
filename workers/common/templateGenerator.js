@@ -69,7 +69,6 @@ function generateStarterCode(questionMeta) {
   return [
     { language: "javascript", code: jsStarter },
     { language: "java", code: javaStarter },
-    { language: "python", code: pyStarter },
   ];
 }
 

@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { SUPPORTED_LANGUAGES } = require("../config/languages");
 
 const submissionSchema = new mongoose.Schema(
   {
@@ -21,7 +22,7 @@ const submissionSchema = new mongoose.Schema(
 
     language: {
       type: String,
-      enum: ["javascript", "java", "cpp"],
+      enum: SUPPORTED_LANGUAGES,
       required: true,
     },
 

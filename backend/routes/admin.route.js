@@ -3,6 +3,10 @@ const Question = require("../models/Question");
 const User = require("../models/User");
 const { authMiddleware, adminMiddleware } = require("../middleware");
 const { generateStarterCode } = require("../../workers/common/templateGenerator");
+const {
+  SUPPORTED_LANGUAGES,
+  isSupportedLanguage,
+} = require("../config/languages");
 
 const router = express.Router();
 
@@ -82,6 +86,21 @@ router.post("/questions", async (req, res) => {
       });
     }
 
+    if (data.starterCode !== undefined && data.starterCode !== null) {
+      if (!Array.isArray(data.starterCode)) {
+        return res.status(400).json({
+          message: "starterCode must be an array",
+        });
+      }
+      for (const item of data.starterCode) {
+        if (!item || typeof item !== "object" || !item.language || !isSupportedLanguage(item.language)) {
+          return res.status(400).json({
+            message: `Unsupported or invalid language in starterCode: '${item?.language}'. Supported languages are: ${SUPPORTED_LANGUAGES.join(", ")}`,
+          });
+        }
+      }
+    }
+
     const question = await Question.create(data);
 
     return res.status(201).json({
@@ -115,6 +134,21 @@ router.put("/questions/:questionId", async (req, res) => {
         parameters: data.parameters,
         returnType: data.returnType,
       });
+    }
+
+    if (data.starterCode !== undefined && data.starterCode !== null) {
+      if (!Array.isArray(data.starterCode)) {
+        return res.status(400).json({
+          message: "starterCode must be an array",
+        });
+      }
+      for (const item of data.starterCode) {
+        if (!item || typeof item !== "object" || !item.language || !isSupportedLanguage(item.language)) {
+          return res.status(400).json({
+            message: `Unsupported or invalid language in starterCode: '${item?.language}'. Supported languages are: ${SUPPORTED_LANGUAGES.join(", ")}`,
+          });
+        }
+      }
     }
 
     const question = await Question.findByIdAndUpdate(questionId, data, {
