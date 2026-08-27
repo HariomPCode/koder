@@ -12,7 +12,7 @@ This document tracks verified engineering issues found in the `koder` codebase (
 
 **Area:** Security / Backend
 
-**Status:** Open
+**Status:** Done
 
 **Current State**
 
@@ -52,7 +52,7 @@ Apply the existing `middleware.js` (or a stricter admin-role check, since `middl
 
 **Area:** Security / Backend
 
-**Status:** Open
+**Status:** Done
 
 **Current State**
 
@@ -73,7 +73,7 @@ Combined with Issue-001 (no auth on this route), this means bcrypt hashes for ev
 
 **Recommended Direction**
 
-Add `.select({ password: 0 })` (or an explicit inclusion list) to the admin `/users` query, in addition to fixing Issue-001. Both are needed — auth fixes *who* can call it, projection fixes *what* it leaks even to a legitimate admin's browser/logs.
+Add `.select({ password: 0 })` (or an explicit inclusion list) to the admin `/users` query, in addition to fixing Issue-001. Both are needed — auth fixes _who_ can call it, projection fixes _what_ it leaks even to a legitimate admin's browser/logs.
 
 **Acceptance Criteria**
 
@@ -106,6 +106,7 @@ Four different places define "which languages exist," and they don't agree:
 **Problem**
 
 Two distinct failure modes follow directly from this mismatch:
+
 1. **Selecting "cpp":** `Submission.create(...)` succeeds (schema allows it), the POST handler returns `{ submissionId, status: "processing" }` as if work was queued, but no job is ever created. The submission's `status` stays `"pending"` forever. The frontend's `pollSubmission` (`frontend/app/problems/[slug]/page.tsx:156-190`) polls every 1000ms indefinitely — it only stops on `"completed"`/`"failed"`, which this submission will never reach.
 2. **Selecting "python":** `"python"` is not in the `Submission` model's `language` enum, so `Submission.create(...)` throws a Mongoose `ValidationError`. The route handler at `backend/routes/submission.route.js:9-46` has no `try/catch`, and `server.js` registers no custom error-handling middleware, so this becomes an unhandled rejection / a generic Express HTML error page returned to a client (`frontend/app/problems/[slug]/page.tsx:132-136`) that unconditionally calls `res.json()`.
 
@@ -198,7 +199,7 @@ The logout request 404s. Because it's wrapped in a `try/catch` that only logs th
 
 **Why It Matters**
 
-The user *appears* logged out (UI shows signed-out state, header updates) but their session cookie is still valid and attached to future requests to the actual backend origin, which is a real security/correctness gap, not just cosmetic.
+The user _appears_ logged out (UI shows signed-out state, header updates) but their session cookie is still valid and attached to future requests to the actual backend origin, which is a real security/correctness gap, not just cosmetic.
 
 **Evidence**
 
@@ -237,7 +238,7 @@ The only real differences between the two files are: the Docker image name, the 
 
 **Why It Matters**
 
-Every fix to verdict logic, timeout handling, or output comparison must currently be applied twice, by hand, in two files, with no compiler or test to catch drift between them (this is exactly the kind of duplication that later breeds a bug where one file is fixed and the other isn't). This is also the concrete gap standing between the current code and an actual "generic execution engine" — the templateGenerator side is already reasonably generic (`generateStarterCode`/`generateJavaScriptRunner`/`generateJavaRunner` driven off shared `questionMeta`), but the *execution* side never got the same treatment.
+Every fix to verdict logic, timeout handling, or output comparison must currently be applied twice, by hand, in two files, with no compiler or test to catch drift between them (this is exactly the kind of duplication that later breeds a bug where one file is fixed and the other isn't). This is also the concrete gap standing between the current code and an actual "generic execution engine" — the templateGenerator side is already reasonably generic (`generateStarterCode`/`generateJavaScriptRunner`/`generateJavaRunner` driven off shared `questionMeta`), but the _execution_ side never got the same treatment.
 
 **Evidence**
 
@@ -284,7 +285,7 @@ This is a direct leftover of the "naive per-test-case execution model → optimi
 
 **Why It Matters**
 
-Dead code that *looks* like part of the execution engine is actively misleading during audits and onboarding — a new contributor reading `workers/java/` would reasonably assume `runCode.js`/`compileCode.js` are the entry points, when they're not. It also means the `DockerSandbox` class carries API surface (`exec`) that exists to serve dead callers as well as the live `executor.js` caller.
+Dead code that _looks_ like part of the execution engine is actively misleading during audits and onboarding — a new contributor reading `workers/java/` would reasonably assume `runCode.js`/`compileCode.js` are the entry points, when they're not. It also means the `DockerSandbox` class carries API surface (`exec`) that exists to serve dead callers as well as the live `executor.js` caller.
 
 **Evidence**
 
@@ -314,13 +315,13 @@ Delete `workers/common/runDocker.js`, `workers/java/runCode.js`, `workers/java/c
 
 **Current State**
 
-`DockerSandbox` (`workers/common/dockerSandbox.js:44-74`) builds its `docker run` args with `--cap-drop ALL`, `--security-opt no-new-privileges`, `--network none`, a memory/cpu/pids limit, and a `readOnly` flag that maps to `--read-only` or `--read-only=false` for the *entire container filesystem*. There is no `--user` flag anywhere in the file.
+`DockerSandbox` (`workers/common/dockerSandbox.js:44-74`) builds its `docker run` args with `--cap-drop ALL`, `--security-opt no-new-privileges`, `--network none`, a memory/cpu/pids limit, and a `readOnly` flag that maps to `--read-only` or `--read-only=false` for the _entire container filesystem_. There is no `--user` flag anywhere in the file.
 
 The JavaScript executor (`workers/javascript/executor.js:67-72`) instantiates the sandbox with `readOnly: true`. The Java executor (`workers/java/executor.js:68-73`) instantiates it with `readOnly: false`, with the comment `// Java compiler needs to write Main.class to /app`.
 
 **Problem**
 
-Setting `readOnly: false` makes the *whole container* writable (there's no narrower "just make `/app` writable" option in the current flag design), not just the one directory that actually needs it. Combined with no `--user` flag (so the process runs as whatever user the base image defaults to — commonly root for `eclipse-temurin` unless the image itself drops privileges), Java submissions run with more filesystem write access than JavaScript submissions for no reason tied to an actual security requirement — it's a side effect of the binary readOnly flag being too coarse for what `javac` needs.
+Setting `readOnly: false` makes the _whole container_ writable (there's no narrower "just make `/app` writable" option in the current flag design), not just the one directory that actually needs it. Combined with no `--user` flag (so the process runs as whatever user the base image defaults to — commonly root for `eclipse-temurin` unless the image itself drops privileges), Java submissions run with more filesystem write access than JavaScript submissions for no reason tied to an actual security requirement — it's a side effect of the binary readOnly flag being too coarse for what `javac` needs.
 
 **Why It Matters**
 
@@ -518,6 +519,7 @@ Remove `redis` from `backend/package.json` and reinstall/update the lockfile.
 **Current State**
 
 No `Dockerfile` or `docker-compose.yml` exists anywhere in the delivered repository (confirmed via full recursive file listing). `backend/.gitignore` explicitly lists both under a "OS files" section:
+
 ```
 # OS files
 Dockerfile
@@ -568,7 +570,7 @@ Partial, dead-end feature: the system happily tells the frontend and the databas
 
 **Why It Matters**
 
-Beyond the direct bug it causes (Issue-003), this is a signal that the "generic problem engine" is generic on the *authoring* side (type mapping, starter code) but not yet on the *execution* side — worth tracking explicitly so it doesn't get assumed to be "already generic across languages."
+Beyond the direct bug it causes (Issue-003), this is a signal that the "generic problem engine" is generic on the _authoring_ side (type mapping, starter code) but not yet on the _execution_ side — worth tracking explicitly so it doesn't get assumed to be "already generic across languages."
 
 **Evidence**
 
@@ -681,6 +683,7 @@ Establish the shared-contract boundary everything else in Phase 3/4 benefits fro
 **What should stay separate:** `dockerSandbox.js`, `createSandbox.js`, `cleanupSandbox.js`, and the per-language `executor.js`/`worker.js` files stay inside `workers` — they're execution-specific and `backend` has no business depending on them (the current `backend/seedProblems.js` and `admin.route.js` imports of `templateGenerator` are fine to keep, once `templateGenerator` lives in `shared` rather than under `workers/common`). `frontend` stays entirely separate; if the language/contract mismatch (ISSUE-003) recurs after Phase 1/2, consider a small shared API-types/schema package (e.g., zod) shared between backend and frontend specifically — but that's a "if needed later," not now.
 
 **Suggested directory structure:**
+
 ```
 koder/
   packages/
@@ -697,7 +700,7 @@ koder/
   package.json        # root, defines the workspace
 ```
 
-**Migration order:** (1) set up the workspace root and move `templateGenerator.js` + `protocol.js` into `packages/shared` first, since they have no further internal dependencies — update the 4 known call sites (`backend/seedProblems.js`, `backend/routes/admin.route.js`, `workers/java/executor.js`, `workers/javascript/executor.js`) to import from `shared`; (2) move `db_calls/getDetails.js` and `db_calls/updateSubmission.js` into `shared`, updating `workerFactory.js` and both executors; (3) tackle `workers/common/workerFactory.js`'s remaining `backend/db` and `backend/queue` requires — these may need to stay backend-owned with workers importing the *connection config* from `shared` rather than the modules themselves, since `db.js`/`queue.js` establish live connections that arguably belong to each running process, not a shared library.
+**Migration order:** (1) set up the workspace root and move `templateGenerator.js` + `protocol.js` into `packages/shared` first, since they have no further internal dependencies — update the 4 known call sites (`backend/seedProblems.js`, `backend/routes/admin.route.js`, `workers/java/executor.js`, `workers/javascript/executor.js`) to import from `shared`; (2) move `db_calls/getDetails.js` and `db_calls/updateSubmission.js` into `shared`, updating `workerFactory.js` and both executors; (3) tackle `workers/common/workerFactory.js`'s remaining `backend/db` and `backend/queue` requires — these may need to stay backend-owned with workers importing the _connection config_ from `shared` rather than the modules themselves, since `db.js`/`queue.js` establish live connections that arguably belong to each running process, not a shared library.
 
 **Risks:** moving `db_calls` requires care around Mongoose model registration (`mongoose.model("Question", ...)` is a singleton registry — as long as `shared`'s data-access functions accept models as arguments or `shared` itself defines and exports the models, this is safe, but naively importing "the same model file twice from two different node_modules copies" would break); test the full submission flow after each migration step, not just at the end.
 
@@ -708,6 +711,7 @@ koder/
 **Total issues found:** 15
 
 **Priority breakdown:**
+
 - P0 (Critical): 3
 - P1 (High): 5
 - P2 (Medium): 4
@@ -715,6 +719,7 @@ koder/
 - Future/Long-term: 1
 
 **Top 5 issues to resolve first:**
+
 1. ISSUE-001 — Unauthenticated admin API
 2. ISSUE-002 — Password hashes leaked via admin API
 3. ISSUE-003 — Language contract mismatch (stuck/crashing submissions)
