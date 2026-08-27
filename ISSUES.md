@@ -91,7 +91,7 @@ Add `.select({ password: 0 })` (or an explicit inclusion list) to the admin `/us
 
 **Area:** Architecture / Backend / Workers / Frontend
 
-**Status:** Open
+**Status:** Done
 
 **Current State**
 
@@ -144,7 +144,6 @@ Immediate/small fix: remove `"cpp"` and `"python"` from the frontend `<select>` 
 **Area:** Architecture / Backend / Workers
 
 **Status:** Done
-
 
 **Current State**
 
