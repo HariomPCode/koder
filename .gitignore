@@ -25,10 +25,6 @@ worker/dist/
 # Logs
 *.log
 
-# OS files
-Dockerfile
-docker-compose.yml
-
 # Worker temporary sandboxes
 workers/common/temp/
 workers/temp/
