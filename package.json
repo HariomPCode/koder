@@ -9,7 +9,8 @@
     "workers"
   ],
   "scripts": {
-    "test": "npm run test --workspace=backend && npm run test --workspace=workers",
+    "test": "npm run test:ci --workspace=backend && npm run test:ci --workspace=workers",
+    "test:ci": "npm run test:ci --workspace=backend && npm run test:ci --workspace=workers",
     "dev:backend": "npm run dev --workspace=backend",
     "worker:js": "npm run worker:js --workspace=workers",
     "worker:java": "npm run worker:java --workspace=workers"
