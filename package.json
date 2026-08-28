@@ -5,6 +5,7 @@
   "workspaces": [
     "packages/*",
     "backend",
+    "frontend",
     "workers"
   ],
   "scripts": {
