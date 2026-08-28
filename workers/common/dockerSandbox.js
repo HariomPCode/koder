@@ -18,6 +18,7 @@ class DockerSandbox {
     cpus = "1",
     pidsLimit = 64,
     readOnly = true,
+    user = "1000:1000",
     tmpfsSize = "64m",
     idleTimeoutSeconds = 120,
   }) {
@@ -28,6 +29,7 @@ class DockerSandbox {
     this.cpus = cpus;
     this.pidsLimit = pidsLimit;
     this.readOnly = readOnly;
+    this.user = user;
     this.tmpfsSize = tmpfsSize;
     this.idleTimeoutSeconds = idleTimeoutSeconds;
 
@@ -42,17 +44,16 @@ class DockerSandbox {
    * Start the isolated Docker sandbox container in detached mode.
    * Container runs `sleep <idleTimeoutSeconds>` as an idle watchdog.
    */
-  async start() {
-    if (this.isStarted) return;
-
-    // Format path for Docker volume mounting across Windows and Linux
+  buildDockerRunArgs() {
     const dockerHostPath = this.jobDir.replace(/\\/g, "/");
 
-    const dockerArgs = [
+    return [
       "run",
       "-d",
       "--name",
       this.containerName,
+      "--user",
+      this.user,
       "--network",
       "none",
       "--cap-drop",
@@ -73,6 +74,12 @@ class DockerSandbox {
       "sleep",
       String(this.idleTimeoutSeconds),
     ];
+  }
+
+  async start() {
+    if (this.isStarted) return;
+
+    const dockerArgs = this.buildDockerRunArgs();
 
     await new Promise((resolve, reject) => {
       const child = spawn("docker", dockerArgs);

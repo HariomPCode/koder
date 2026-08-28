@@ -22,6 +22,7 @@ const {
   createExecutionExecutor,
   compareOutputs,
 } = require("./common/executionEngine");
+const DockerSandbox = require("./common/dockerSandbox");
 
 class FakeSandbox {
   static instances = [];
@@ -123,6 +124,8 @@ async function testLanguageExecutor(name, executor, expectedCommand) {
 
   const sandbox = FakeSandbox.instances[FakeSandbox.instances.length - 1];
   assert.strictEqual(sandbox.options.image, executor.config.image);
+  assert.strictEqual(sandbox.options.readOnly, true);
+  assert.strictEqual(sandbox.options.user, "1000:1000");
   assert.deepStrictEqual(
     sandbox.commands.filter((command) => command.type === "run")[0].command,
     expectedCommand,
@@ -138,6 +141,30 @@ async function runTests() {
   );
   assert.strictEqual(typeof workerRegistrations[0].processor, "function");
   assert.strictEqual(typeof workerRegistrations[1].processor, "function");
+
+  for (const config of [jsExecutor.config, javaExecutor.config]) {
+    const sandbox = new DockerSandbox({
+      jobId: `args-${config.language}`,
+      jobDir: "C:\\sandbox\\job",
+      image: config.image,
+      readOnly: config.readOnly,
+      user: config.user,
+    });
+    const dockerArgs = sandbox.buildDockerRunArgs();
+    assert.ok(dockerArgs.includes("--read-only"));
+    assert.deepStrictEqual(
+      dockerArgs.slice(dockerArgs.indexOf("--user"), dockerArgs.indexOf("--user") + 2),
+      ["--user", "1000:1000"],
+    );
+    assert.ok(dockerArgs.includes("--cap-drop"));
+    assert.ok(dockerArgs.includes("ALL"));
+    assert.ok(dockerArgs.includes("--network"));
+    assert.ok(dockerArgs.includes("none"));
+    assert.ok(dockerArgs.includes("--security-opt"));
+    assert.ok(dockerArgs.includes("no-new-privileges"));
+    assert.ok(dockerArgs.includes("-v"));
+    assert.ok(dockerArgs.includes("C:/sandbox/job:/app"));
+  }
 
   const candidateFiles = [
     "common/runDocker.js",
@@ -176,6 +203,8 @@ async function runTests() {
   await testLanguageExecutor("java", javaExecutor, ["java", "Main"]);
 
   const javaSandbox = FakeSandbox.instances[FakeSandbox.instances.length - 1];
+  assert.strictEqual(javaExecutor.config.readOnly, true);
+  assert.strictEqual(javaExecutor.config.user, "1000:1000");
   assert.deepStrictEqual(
     javaSandbox.commands.find((command) => command.type === "exec").command,
     ["javac", "Main.java"],

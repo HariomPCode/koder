@@ -6,6 +6,7 @@ const config = {
   language: "javascript",
   image: "node:20-alpine",
   readOnly: true,
+  user: "1000:1000",
   sourceFile: "app.js",
   execCommand: ["node", "app.js"],
   templateDirectory: path.resolve(__dirname, "../templates/javascript"),

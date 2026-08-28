@@ -154,7 +154,8 @@ public static int[] twoSum(int[] nums, int target) {
     jobId: "hardened-java",
     jobDir: javaJobDir,
     image: "eclipse-temurin:17-jdk-alpine-3.23",
-    readOnly: false,
+    readOnly: true,
+    user: "1000:1000",
   });
 
   try {

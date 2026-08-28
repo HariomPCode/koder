@@ -130,6 +130,7 @@ function createExecutionExecutor(config, dependencies = {}) {
       jobDir,
       image: config.image,
       readOnly: config.readOnly,
+      user: config.user,
     });
 
     const testcases = details.testcases || [];
