@@ -28,12 +28,12 @@ export default function Header() {
   };
 
   return (
-    <header className="h-16 bg-black px-8 flex items-center justify-between border-b border-neutral-800">
-      <Link href="/" className="text-2xl font-bold text-white">
+    <header className="sticky top-0 z-30 h-16 shrink-0 border-b border-neutral-800 bg-black px-4 flex items-center justify-between sm:px-6 lg:px-8">
+      <Link href="/" className="text-xl font-bold tracking-tight text-white">
         Koder
       </Link>
 
-      <div className="flex items-center gap-8">
+      <div className="flex items-center gap-5 sm:gap-8">
         <Link
           href="/problems"
           className="text-white hover:text-neutral-300 transition-colors"
