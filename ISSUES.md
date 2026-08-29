@@ -507,7 +507,7 @@ This is the appropriate architecture choice for a development environment balanc
 
 ---
 
-### ISSUE-014 — Python starter-code generation exists with no execution support behind it
+### ISSUE-014 — Python starter-code generation lacked execution support
 
 **Priority:** P3
 
@@ -519,17 +519,9 @@ This is the appropriate architecture choice for a development environment balanc
 
 Python is now supported end to end: the shared contract and frontend expose it, `python-queue` dispatches jobs to a Python worker, and the worker executes generated runners in the existing hardened DockerSandbox. CI-safe contract/execution tests and real Docker verification cover Accepted, Wrong Answer, Time Limit Exceeded, Runtime Error, sandbox isolation, and cleanup.
 
-**Problem**
+**Resolution**
 
-Partial, dead-end feature: the system happily tells the frontend and the database that Python is a supported starter-code language, but there is no path to actually executing Python code. This directly feeds Issue-003's crash scenario (resolved as part of Phase 1).
-
-**Why It Matters**
-
-Beyond the direct bug (now fixed by Issue-003's language validation), this is a signal that the "generic problem engine" is generic on the _authoring_ side (type mapping, starter code) but not yet on the _execution_ side — worth tracking explicitly so it doesn't get assumed to be "already generic across languages."
-
-**Recommended Direction**
-
-Either finish the Python path (add `generatePythonRunner`, a `python/executor.js` + `python/worker.js` following the pattern established in Issue-006's refactor, and a `pythonQueue`), or remove Python from `generateStarterCode` and remove it from the Question model's supported languages. Since Issue-003 already removed Python from the frontend selector as part of the language validation hardening, the immediate gap is closed. This is a product decision for a future phase: decide whether to invest in Python support or remove it entirely.
+The Python execution path is complete: `generatePythonRunner`, `workers/python/executor.js`, `workers/python/worker.js`, and `python-queue` are implemented. Python remains in the shared language contract and frontend selector, so starter-code generation and execution now agree.
 
 ---
 
@@ -650,22 +642,18 @@ koder/
 
 # Summary
 
-**Total issues:** 15 (13 completed, 2 open)
+**Total issues:** 15 (15 completed)
 
 **Completion breakdown:**
-- 13 issues resolved and verified ✅
-- 2 issues remaining (product decision and future scaling) 🔵
+- 15 issues resolved and verified ✅
+- No open implementation issues remain.
 
 **Completed by priority:**
 - P0 (Critical): 3/3 ✅
 - P1 (High): 5/5 ✅
 - P2 (Medium): 4/4 ✅
-- P3 (Enhancements): 1/2 ✅ (ISSUE-014 still open)
-
-**Remaining open issues:**
-
-1. **ISSUE-014** — Python support (product decision: implement full support or remove partial support)
-2. **ISSUE-015** — Worker concurrency/scaling (future: not urgent until real load materializes)
+- P3 (Enhancements): 2/2 ✅
+- Future: 1/1 ✅ (ISSUE-015 records intentionally deferred scaling work)
 
 **Implementation milestones achieved:**
 - ✅ Core security issues (auth, hashes, contracts) fixed
@@ -692,18 +680,6 @@ TypeError: serializeBatch is not a function
 **Action:** This error should be investigated as part of future maintenance work on the manual test suite, but it does NOT invalidate any of the completed issues (ISSUE-008/009/013). It may indicate an API drift in BullMQ or a test-specific configuration issue.
 
 **Note:** Manual smoke tests are not part of the CI pipeline (see ISSUE-009 for the distinction between CI-safe unit tests and manual infrastructure-dependent tests).
-
-### Uncommitted Development State
-
-The following files have local modifications but were not committed (per task constraints):
-
-- `backend/routes/question.route.js` — limit capping implementation (ISSUE-011)
-- `backend/Dockerfile` — if custom sandbox image is later needed
-- `workers/Dockerfile` — if custom sandbox image is later needed
-
-These represent implementation choices made during the phases above and are ready for review/commit in the next workflow step.
-
----
 
 # Implemented Project Architecture
 
@@ -740,6 +716,9 @@ koder/
     java/
       executor.js              # Thin wrapper using executionEngine
       worker.js
+    python/
+      executor.js              # Thin wrapper using executionEngine
+      worker.js
     javascript/
       executor.js              # Thin wrapper using executionEngine
       worker.js
@@ -754,11 +733,11 @@ koder/
 
 2. **Three sub-packages, not monorepo-wide build graph** — Only `backend`, `workers`, and `packages/shared`. Frontend stays separate (REST-only boundary).
 
-3. **Execution engine unified** — Language-specific executors (`java/executor.js`, `javascript/executor.js`) are now thin wrappers around a shared `executionEngine.js` that handles verdict logic, timeouts, output comparison, and result persistence.
+3. **Execution engine unified** — Language-specific executors (`java/executor.js`, `javascript/executor.js`, `python/executor.js`) are thin wrappers around a shared `executionEngine.js` that handles verdict logic, timeouts, output comparison, and result persistence.
 
 4. **No `backend/` reach into `workers/`** — All cross-concern code lives in `packages/shared` and is imported by both.
 
-5. **Docker images unchanged** — Sandbox execution still uses public images (`eclipse-temurin:17-jdk-alpine-3.23`, `node:20-alpine`) without custom Dockerfiles, as these images are ephemeral submission sandboxes, not application containers. `docker-compose.yml` orchestrates MongoDB/Redis infrastructure and host-run services for development.
+5. **Docker images unchanged** — Sandbox execution uses public images (`eclipse-temurin:17-jdk-alpine-3.23`, `node:20-alpine`, `python:3.11-alpine`) without custom Dockerfiles, as these images are ephemeral submission sandboxes, not application containers. `docker-compose.yml` orchestrates MongoDB/Redis infrastructure and host-run services for development.
 
 ## Verification of Architecture Goals
 

@@ -9,17 +9,21 @@ stack.
 
 ```powershell
 Copy-Item .env.example .env
+Copy-Item .env.example backend/.env
 docker compose up -d mongo redis
 npm install
 node backend/seedProblems.js
 npm run dev:backend
 npm run worker:js
 npm run worker:java
+npm run worker:python
 npm run dev --workspace=frontend
 ```
 
-The backend and workers load the root `.env` file. The frontend reads
-`NEXT_PUBLIC_BACKEND_URL` from the environment when it is started.
+The backend and workers load the root `.env` file. `seedProblems.js` and
+`promoteAdmin.js` explicitly load `backend/.env`, which is why the setup above
+copies the template there as well. The frontend reads `NEXT_PUBLIC_BACKEND_URL`
+from the environment when it is started.
 
 MongoDB and Redis persist data in named Docker volumes. Starting Compose does
 not seed or delete application data. Run `node backend/seedProblems.js`

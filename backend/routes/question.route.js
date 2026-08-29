@@ -2,7 +2,6 @@ const express = require("express");
 const middleware = require("../middleware");
 const Question = require("../models/Question");
 const Submission = require("../models/Submission");
-const { queue } = require("../queue");
 
 const router = express.Router();
 
@@ -51,7 +50,7 @@ router.get("/:slug", async (req, res) => {
   }
 
   return res.json({
-    messgae: "Question fetched successfully",
+    message: "Question fetched successfully",
     question,
   });
 });

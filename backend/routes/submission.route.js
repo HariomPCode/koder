@@ -87,8 +87,6 @@ router.get("/:submissionId", middleware, async (req, res, next) => {
       });
     }
 
-    console.log(submission);
-
     return res.json({
       submission,
     });
