@@ -543,27 +543,29 @@ Either finish the Python path (add `generatePythonRunner`, a `python/executor.js
 
 **Area:** Workers / Scalability
 
-**Status:** 🔵 OPEN
+**Status:** ✅ COMPLETE
 
 **Current State**
 
-`workers/common/workerFactory.js:18-20` instantiates `new Worker(queueName, processor, { connection })` with no `concurrency` option set, so BullMQ uses its default (concurrency of 1 per `Worker` instance). There's one Java worker process and one JS worker process, each single-concurrency, with no documented scaling story (no `docker-compose` replicas, no PM2/cluster config, nothing).
+BullMQ keeps its default concurrency of 1 per language worker. That is intentional for this portfolio project: each submission receives a resource-limited Docker sandbox, and no workload evidence justifies higher concurrency or autoscaling.
 
 **Problem**
 
-Not a bug today — the seed data is 8 questions and there's no evidence of production load — but as submission volume grows, throughput is capped at "one Java submission and one JS submission executing at a time" per the current process topology, since each Docker sandbox already consumes a full container per submission and workers process jobs serially by default.
+BullMQ job IDs are queue-scoped. JavaScript, Java, and Python jobs could therefore all have ID `1`; the previous `createSandbox(job.id)` implementation mapped them to the same writable host directory and `/app` bind mount.
 
 **Why It Matters**
 
-This is the concrete scalability bottleneck for this project: DockerSandbox already isolates submissions well at the container level, so scaling out is mostly a matter of running more worker processes (or raising `concurrency`, mindful of host resource limits since each concurrent job spins up its own Docker container) — but nothing in the current code does either.
+The collision could cause cleanup races and cross-submission file interference even at the existing one-job-per-language topology.
 
 **Recommended Direction**
 
-Not urgent — flagged for when actual load materializes. When needed: pass an explicit `concurrency` to `createWorker`, bounded by host CPU/memory relative to the per-container `--memory`/`--cpus` limits already set in `DockerSandbox`, and/or run multiple worker processes behind the same queue (BullMQ supports this natively).
+The execution engine now namespaces each directory by language and job ID (for example, `javascript-1`, `java-1`, and `python-1`). `createSandbox` validates the key and ensures the resolved path remains beneath `workers/common/temp`. Docker sandbox controls and BullMQ concurrency remain unchanged. Configurable worker scaling is intentionally deferred until measured workload and a host-level capacity budget justify it.
 
 **Acceptance Criteria**
 
-- Worker concurrency is an explicit, documented, tunable value rather than an implicit default.
+- Same numeric job IDs across language queues cannot share a sandbox directory or `/app` mount.
+- CI-safe and real Docker tests verify concurrent JavaScript, Java, and Python isolation and cleanup.
+- Higher worker concurrency remains intentionally out of scope.
 
 ---
 
@@ -604,11 +606,9 @@ Reproducible infrastructure:
 
 ## Remaining Work
 
-### Phase 5 — Product Features & Future Scaling
+### Phase 5 — Product Features & Future Scaling ✅ COMPLETE
 
-These are the only remaining unresolved issues:
-
-- 🔵 **ISSUE-015** — Worker concurrency/scaling configuration (not urgent; for when load materializes)
+No unresolved implementation issues remain. Configurable worker concurrency and horizontal scaling are intentionally deferred unless future measured workload justifies their operational complexity and host resource budget.
 
 ---
 

@@ -123,7 +123,10 @@ function createExecutionExecutor(config, dependencies = {}) {
       throw new Error(`Unsupported language for ${config.language} worker`);
     }
 
-    const jobDir = makeSandboxDirectory(job.id);
+    // BullMQ job IDs are scoped to a queue. Namespace the directory by language
+    // so jobs such as js-queue/1 and java-queue/1 never share a writable /app.
+    const executionKey = `${config.language}-${job.id}`;
+    const jobDir = makeSandboxDirectory(executionKey);
     const sourcePath = path.join(jobDir, config.sourceFile);
     const sandbox = new Sandbox({
       jobId: job.id,
