@@ -40,10 +40,14 @@ function detailsFor(code) {
 }
 
 async function executeCase(name, code) {
+  return executeDetails(name, detailsFor(code));
+}
+
+async function executeDetails(name, details) {
   const updates = [];
   const jobDir = fs.mkdtempSync(path.join(os.tmpdir(), `koder-python-${name}-`));
   const execute = createExecutionExecutor(pythonExecutor.config, {
-    getQuestionDetails: async () => detailsFor(code),
+    getQuestionDetails: async () => details,
     updateSubmission: async (_id, result) => {
       updates.push(result);
       return result;
@@ -65,6 +69,21 @@ async function executeCase(name, code) {
     "destroyed submission container must not remain",
   );
   return result;
+}
+
+function booleanDetails(code) {
+  return {
+    language: "python",
+    code,
+    slug: "python-boolean-regression",
+    functionName: "check",
+    parameters: [{ name: "s", type: "String" }],
+    returnType: "boolean",
+    testcases: [
+      { input: "racecar", output: "true" },
+      { input: "hello", output: "false" },
+    ],
+  };
 }
 
 async function testSecurity() {
@@ -117,6 +136,48 @@ async function runTests() {
     "class Solution:\n    def twoSum(self, nums, target):\n        raise RuntimeError('boom')",
   );
   assert.strictEqual(runtimeError.verdict, "Runtime Error");
+
+  const booleanByInput = await executeDetails(
+    "boolean-multiple-cases",
+    booleanDetails(
+      "class Solution:\n    def check(self, s):\n        return s == 'racecar'",
+    ),
+  );
+  assert.strictEqual(booleanByInput.verdict, "Accepted");
+  assert.strictEqual(booleanByInput.passed, 2);
+
+  const alwaysTrue = await executeDetails(
+    "boolean-always-true",
+    booleanDetails(
+      "class Solution:\n    def check(self, s):\n        return True",
+    ),
+  );
+  assert.strictEqual(alwaysTrue.verdict, "Wrong Answer");
+  assert.strictEqual(alwaysTrue.passed, 1);
+
+  const alwaysFalse = await executeDetails(
+    "boolean-always-false",
+    booleanDetails(
+      "class Solution:\n    def check(self, s):\n        return False",
+    ),
+  );
+  assert.strictEqual(alwaysFalse.verdict, "Wrong Answer");
+  assert.strictEqual(alwaysFalse.passed, 0);
+
+  const nonBooleanMultipleCases = await executeDetails("integer-multiple-cases", {
+    language: "python",
+    code: "class Solution:\n    def length(self, s):\n        return len(s)",
+    slug: "python-integer-regression",
+    functionName: "length",
+    parameters: [{ name: "s", type: "String" }],
+    returnType: "int",
+    testcases: [
+      { input: "racecar", output: "7" },
+      { input: "hello", output: "5" },
+    ],
+  });
+  assert.strictEqual(nonBooleanMultipleCases.verdict, "Accepted");
+  assert.strictEqual(nonBooleanMultipleCases.passed, 2);
 
   await testSecurity();
   console.log("✓ Python Docker: Accepted, Wrong Answer, TLE, Runtime Error, security, and cleanup verified");

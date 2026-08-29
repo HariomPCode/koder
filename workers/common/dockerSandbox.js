@@ -393,13 +393,10 @@ class DockerSandbox {
           break;
         }
 
-        // Validate output immediately to abort batch early if Wrong Answer
-        const actualOutput = (resp.payload || "").trim().replace(/\r\n/g, "\n");
-        const expectedOutput = (tc.output || "").trim().replace(/\r\n/g, "\n");
-        if (actualOutput !== expectedOutput) {
-          // Wrong Answer - stop sending further cases in this batch
-          break;
-        }
+        // Verdict comparison belongs to the execution engine. It has the
+        // language-neutral normalization rules (including Python's True/False
+        // versus judge true/false); duplicating a stricter comparison here can
+        // stop the protocol before later test cases are sent.
       }
     } finally {
       // Graceful shutdown: send EXIT signal
