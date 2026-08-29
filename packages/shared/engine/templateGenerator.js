@@ -1,7 +1,7 @@
 /**
  * Generic Template Generator
  *
- * Dynamically generates protocol-safe runner harnesses for JavaScript and Java,
+ * Dynamically generates protocol-safe runner harnesses for JavaScript, Java, and Python,
  * and standard starter code for user-facing editors.
  */
 
@@ -69,6 +69,7 @@ function generateStarterCode(questionMeta) {
   return [
     { language: "javascript", code: jsStarter },
     { language: "java", code: javaStarter },
+    { language: "python", code: pyStarter },
   ];
 }
 
@@ -137,7 +138,7 @@ function parseTestInput(rawInput, paramDefs) {
   for (let i = 0; i < paramDefs.length; i++) {
     const pType = (paramDefs[i].type || 'string').toLowerCase();
     const isArray = pType.includes('[]') || pType.startsWith('list') || pType.startsWith('array');
-    
+
     if (isArray) {
       if (lineIdx < lines.length && lines[lineIdx].startsWith('[')) {
         args.push(parseInputValue(lines[lineIdx], pType));
@@ -636,10 +637,168 @@ public class Main {
 `;
 }
 
+/**
+ * Generates the full Python runner source code for the submission.
+ */
+function generatePythonRunner(questionMeta, userCode) {
+  const { functionName, parameters = [] } = questionMeta;
+  const paramDefsJson = JSON.stringify(parameters);
+
+  return `import sys
+import base64
+import json
+from typing import Any, List
+
+# ==========================================
+# USER SOLUTION
+# ==========================================
+${userCode}
+
+# ==========================================
+# RUNNER HARNESS & PROTOCOL DRIVER
+# ==========================================
+def parse_input_value(token_or_line, param_type):
+    norm_type = (param_type or 'string').lower().strip()
+    trimmed = (token_or_line or '').strip()
+
+    if norm_type in ['int', 'integer', 'number']:
+        return int(trimmed)
+    if norm_type in ['double', 'float']:
+        return float(trimmed)
+    if norm_type in ['bool', 'boolean']:
+        return trimmed.lower() in ['true', '1']
+    if norm_type in ['str', 'string']:
+        if (trimmed.startswith('"') and trimmed.endswith('"')) or (trimmed.startswith("'") and trimmed.endswith("'")):
+            return trimmed[1:-1]
+        return trimmed
+    if '[]' in norm_type or norm_type.startswith('list'):
+        if trimmed.startswith('['):
+            try:
+                return json.loads(trimmed)
+            except:
+                pass
+        clean = trimmed.replace('[', '').replace(']', '').strip()
+        if not clean:
+            return []
+        items = clean.split()
+        if 'int' in norm_type or 'number' in norm_type or 'double' in norm_type or 'float' in norm_type:
+            return [float(x) if '.' in x else int(x) for x in items]
+        return items
+    return trimmed
+
+def parse_test_input(raw_input, param_defs):
+    lines = [l.strip() for l in raw_input.strip().split('\\n') if l.strip()]
+    if not param_defs:
+        return []
+
+    args = []
+    line_idx = 0
+    all_tokens = raw_input.strip().split()
+    token_idx = 0
+
+    for p in param_defs:
+        p_type = (p.get('type') or 'string').lower()
+        is_array = '[]' in p_type or p_type.startswith('list')
+
+        if is_array:
+            if line_idx < len(lines) and lines[line_idx].startswith('['):
+                args.append(parse_input_value(lines[line_idx], p_type))
+                line_idx += 1
+            elif line_idx < len(lines) and lines[line_idx].isdigit() and (line_idx + 1) < len(lines):
+                length = int(lines[line_idx])
+                line_idx += 1
+                arr_elements = [float(x) if '.' in x else int(x) for x in lines[line_idx].split()]
+                args.append(arr_elements[:length])
+                line_idx += 1
+            elif line_idx < len(lines) and len(lines) == len(param_defs):
+                args.append(parse_input_value(lines[line_idx], p_type))
+                line_idx += 1
+            elif token_idx < len(all_tokens) and all_tokens[token_idx].isdigit():
+                length = int(all_tokens[token_idx])
+                token_idx += 1
+                arr = []
+                for _ in range(length):
+                    if token_idx < len(all_tokens):
+                        arr.append(float(all_tokens[token_idx]) if '.' in all_tokens[token_idx] else int(all_tokens[token_idx]))
+                        token_idx += 1
+                args.append(arr)
+            elif line_idx < len(lines):
+                args.append(parse_input_value(lines[line_idx], p_type))
+                line_idx += 1
+            else:
+                args.append([])
+        else:
+            if line_idx < len(lines):
+                args.append(parse_input_value(lines[line_idx], p_type))
+                line_idx += 1
+            elif token_idx < len(all_tokens):
+                args.append(parse_input_value(all_tokens[token_idx], p_type))
+                token_idx += 1
+            else:
+                args.append(None)
+
+    return args
+
+def run_test_case(raw_input):
+    param_defs = ${paramDefsJson}
+    args = parse_test_input(raw_input, param_defs)
+
+    solution_class = globals().get('Solution')
+    if solution_class is not None and hasattr(solution_class, '${functionName}'):
+        target_fn = getattr(solution_class, '${functionName}')
+        obj = Solution()
+        ans = target_fn(obj, *args)
+    elif '${functionName}' in dir():
+        target_fn = globals()['${functionName}']
+        ans = target_fn(*args)
+    else:
+        raise Exception('Function ${functionName} is not defined')
+
+    if isinstance(ans, (list, tuple)):
+        return ' '.join(str(x) for x in ans)
+    return str(ans) if ans is not None else ''
+
+def main():
+    for line in sys.stdin:
+        trimmed = line.strip()
+        if not trimmed:
+            continue
+        if trimmed == 'EXIT':
+            sys.exit(0)
+
+        space_idx = trimmed.find(' ')
+        if space_idx == -1:
+            continue
+
+        case_id = trimmed[:space_idx]
+        b64_input = trimmed[space_idx + 1:]
+
+        try:
+            raw_input = base64.b64decode(b64_input).decode('utf-8')
+        except:
+            raw_input = b64_input
+
+        try:
+            output = run_test_case(raw_input)
+            b64_output = base64.b64encode(output.encode('utf-8')).decode('utf-8')
+            sys.stdout.write(f'{case_id} OK {b64_output}\\n')
+            sys.stdout.flush()
+        except Exception as err:
+            err_msg = str(err) if str(err) else 'Runtime Error'
+            b64_err = base64.b64encode(err_msg.encode('utf-8')).decode('utf-8')
+            sys.stdout.write(f'{case_id} ERROR {b64_err}\\n')
+            sys.stdout.flush()
+
+if __name__ == '__main__':
+    main()
+`;
+}
+
 module.exports = {
   toJavaType,
   toPythonType,
   generateStarterCode,
   generateJavaScriptRunner,
   generateJavaRunner,
+  generatePythonRunner,
 };

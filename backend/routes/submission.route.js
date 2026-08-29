@@ -1,7 +1,7 @@
 const express = require("express");
 const Question = require("../models/Question");
 const Submission = require("../models/Submission");
-const { jsQueue, javaQueue } = require("../queue");
+const { jsQueue, javaQueue, pythonQueue } = require("../queue");
 const middleware = require("../middleware");
 const {
   SUPPORTED_LANGUAGES,
@@ -15,6 +15,7 @@ const router = express.Router();
 const LANGUAGE_QUEUES = {
   javascript: jsQueue,
   java: javaQueue,
+  python: pythonQueue,
 };
 
 router.post("/:questionId", middleware, async (req, res, next) => {

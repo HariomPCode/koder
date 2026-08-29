@@ -4,6 +4,7 @@ const {
   generateStarterCode,
   generateJavaScriptRunner,
   generateJavaRunner,
+  generatePythonRunner,
 } = require("@koder/shared");
 
 module.exports = {
@@ -12,5 +13,5 @@ module.exports = {
   generateStarterCode,
   generateJavaScriptRunner,
   generateJavaRunner,
+  generatePythonRunner,
 };
-

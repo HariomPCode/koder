@@ -6,6 +6,7 @@
 const QUEUE_NAMES = Object.freeze({
   javascript: "js-queue",
   java: "java-queue",
+  python: "python-queue",
 });
 
 const JOB_NAMES = Object.freeze({

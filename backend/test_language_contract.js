@@ -12,6 +12,7 @@ process.env.NODE_ENV = "test";
 const queuedJobs = {
   javascript: [],
   java: [],
+  python: [],
 };
 
 // Mock queue before loading routes so it doesn't open live redis connection
@@ -32,6 +33,12 @@ require.cache[queuePath] = {
       add: async function (name, data) {
         queuedJobs.java.push({ name, data });
         return { id: `java-job-${queuedJobs.java.length}` };
+      },
+    },
+    pythonQueue: {
+      add: async function (name, data) {
+        queuedJobs.python.push({ name, data });
+        return { id: `python-job-${queuedJobs.python.length}` };
       },
     },
   },
@@ -171,13 +178,14 @@ async function runTests() {
 
   try {
     // 1. Source of truth configuration
-    await testCase("1. SUPPORTED_LANGUAGES contains exactly ['javascript', 'java']", async () => {
-      assert.deepStrictEqual([...SUPPORTED_LANGUAGES], ["javascript", "java"]);
+    await testCase("1. SUPPORTED_LANGUAGES contains ['javascript', 'java', 'python']", async () => {
+      assert.deepStrictEqual([...SUPPORTED_LANGUAGES], ["javascript", "java", "python"]);
       assert.strictEqual(isSupportedLanguage("javascript"), true);
       assert.strictEqual(isSupportedLanguage("JAVASCRIPT"), true);
       assert.strictEqual(isSupportedLanguage("java"), true);
+      assert.strictEqual(isSupportedLanguage("python"), true);
+      assert.strictEqual(isSupportedLanguage("PYTHON"), true);
       assert.strictEqual(isSupportedLanguage("cpp"), false);
-      assert.strictEqual(isSupportedLanguage("python"), false);
       assert.strictEqual(isSupportedLanguage(""), false);
       assert.strictEqual(isSupportedLanguage(null), false);
     });
@@ -260,11 +268,10 @@ async function runTests() {
       assert.strictEqual(queuedJobs.java.length, initialJavaJobs, "Must not queue a Java job");
     });
 
-    // 5. Python submission is rejected with 400 Bad Request (no unhandled 500 error)
-    await testCase("5. Python submission is rejected with 400 (no DB record, no queued job)", async () => {
+    // 5. Python submission is accepted and enqueued to python-queue
+    await testCase("5. Valid Python submission is accepted and enqueued to python-queue", async () => {
       const initialSubs = createdSubmissions.length;
-      const initialJsJobs = queuedJobs.javascript.length;
-      const initialJavaJobs = queuedJobs.java.length;
+      const initialJobs = queuedJobs.python.length;
 
       const res = await fetch(`${baseUrl}/api/v1/submissions/${mockQuestion._id}`, {
         method: "POST",
@@ -274,16 +281,17 @@ async function runTests() {
         },
         body: JSON.stringify({
           language: "python",
-          code: "def twoSum(): pass",
+          code: "def twoSum(): return [0, 1]",
         }),
       });
 
-      assert.strictEqual(res.status, 400);
+      assert.strictEqual(res.status, 200);
       const data = await res.json();
-      assert.ok(data.message.includes("Unsupported language"));
-      assert.strictEqual(createdSubmissions.length, initialSubs, "Must not create a Submission document");
-      assert.strictEqual(queuedJobs.javascript.length, initialJsJobs, "Must not queue a JS job");
-      assert.strictEqual(queuedJobs.java.length, initialJavaJobs, "Must not queue a Java job");
+      assert.strictEqual(data.status, "processing");
+      assert.ok(data.submissionId);
+      assert.strictEqual(createdSubmissions.length, initialSubs + 1);
+      assert.strictEqual(queuedJobs.python.length, initialJobs + 1);
+      assert.strictEqual(createdSubmissions[createdSubmissions.length - 1].language, "python");
     });
 
     // 6. Arbitrary unsupported language string is rejected with 400
@@ -309,8 +317,8 @@ async function runTests() {
       assert.strictEqual(res2.status, 400);
     });
 
-    // 7. Submission schema enum enforces supported languages
-    await testCase("7. Submission Mongoose model rejects unsupported languages during validation", async () => {
+    // 7. Submission schema accepts all supported languages
+    await testCase("7. Submission Mongoose model accepts Python during validation", async () => {
       const invalidSub = new Submission({
         userId: mockUser._id,
         questionId: mockQuestion._id,
@@ -324,8 +332,7 @@ async function runTests() {
       } catch (err) {
         validationError = err;
       }
-      assert.ok(validationError, "Expected Mongoose validation error for python in Submission model");
-      assert.ok(validationError.errors.language);
+      assert.strictEqual(validationError, null, "Python must be accepted by the Submission model");
     });
 
     // 8. Question schema enum enforces supported languages
@@ -359,7 +366,7 @@ async function runTests() {
       });
 
       const languages = starter.map((s) => s.language);
-      assert.deepStrictEqual(languages, ["javascript", "java"]);
+      assert.deepStrictEqual(languages, ["javascript", "java", "python"]);
       for (const lang of languages) {
         assert.strictEqual(isSupportedLanguage(lang), true);
       }
@@ -428,8 +435,8 @@ async function runTests() {
       assert.strictEqual(res2.status, 400);
     });
 
-    // 11. Admin PUT /admin/questions/:id rejects unsupported starterCode languages
-    await testCase("11. Admin PUT /admin/questions/:id rejects starterCode with unsupported languages", async () => {
+    // 11. Admin PUT /admin/questions/:id accepts Python starterCode
+    await testCase("11. Admin PUT /admin/questions/:id accepts Python starterCode", async () => {
       const res = await fetch(`${baseUrl}/admin/questions/${mockQuestion._id}`, {
         method: "PUT",
         headers: {
@@ -441,9 +448,7 @@ async function runTests() {
         }),
       });
 
-      assert.strictEqual(res.status, 400);
-      const data = await res.json();
-      assert.ok(data.message.includes("Unsupported or invalid language in starterCode"));
+      assert.strictEqual(res.status, 200);
     });
 
     // 12. Frontend problem page source code only presents supported languages
@@ -453,8 +458,8 @@ async function runTests() {
 
       assert.ok(frontendCode.includes('<option value="javascript">JavaScript</option>'), "Frontend must include JavaScript option");
       assert.ok(frontendCode.includes('<option value="java">Java</option>'), "Frontend must include Java option");
+      assert.ok(frontendCode.includes('<option value="python">Python</option>'), "Frontend must include Python option");
       assert.ok(!frontendCode.includes('<option value="cpp">'), "Frontend must NOT include C++ option");
-      assert.ok(!frontendCode.includes('<option value="python">'), "Frontend must NOT include Python option");
     });
 
   } finally {

@@ -2,11 +2,12 @@
  * Authoritative source of truth for supported execution languages across the platform.
  */
 
-const SUPPORTED_LANGUAGES = Object.freeze(["javascript", "java"]);
+const SUPPORTED_LANGUAGES = Object.freeze(["javascript", "java", "python"]);
 
 const LANGUAGE_DISPLAY_NAMES = Object.freeze({
   javascript: "JavaScript",
   java: "Java",
+  python: "Python",
 });
 
 function isSupportedLanguage(lang) {

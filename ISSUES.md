@@ -513,11 +513,11 @@ This is the appropriate architecture choice for a development environment balanc
 
 **Area:** Workers / Architecture
 
-**Status:** 🔵 OPEN
+**Status:** ✅ COMPLETE
 
 **Current State**
 
-`workers/common/templateGenerator.js` has a full `toPythonType()` mapping function (lines 28-43) and generates a Python starter stub inside `generateStarterCode()` (lines 62-73, `pyStarter`), which is included in `Question.starterCode`. There is no `generatePythonRunner()` function, no `python` worker, and no `python` queue.
+Python is now supported end to end: the shared contract and frontend expose it, `python-queue` dispatches jobs to a Python worker, and the worker executes generated runners in the existing hardened DockerSandbox. CI-safe contract/execution tests and real Docker verification cover Accepted, Wrong Answer, Time Limit Exceeded, Runtime Error, sandbox isolation, and cleanup.
 
 **Problem**
 
@@ -608,7 +608,6 @@ Reproducible infrastructure:
 
 These are the only remaining unresolved issues:
 
-- 🔵 **ISSUE-014** — Python support decision (add full support or remove partial support)
 - 🔵 **ISSUE-015** — Worker concurrency/scaling configuration (not urgent; for when load materializes)
 
 ---

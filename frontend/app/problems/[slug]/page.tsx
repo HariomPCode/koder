@@ -227,6 +227,7 @@ export default function SolveProblem() {
           >
             <option value="javascript">JavaScript</option>
             <option value="java">Java</option>
+            <option value="python">Python</option>
           </select>
 
           <Button
