@@ -55,7 +55,7 @@ async function runTests() {
         "Content-Type": "application/json",
         Cookie: `auth_token=${token}`,
       },
-      body: JSON.stringify({ language: "python", code: "print('x')" }),
+      body: JSON.stringify({ language: "rust", code: "fn main() {}" }),
     });
     assert.strictEqual(clientErrorResponse.status, 400);
     assert.match((await clientErrorResponse.json()).message, /Unsupported language/);

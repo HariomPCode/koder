@@ -13,6 +13,7 @@
     "test:ci": "npm run test:ci --workspace=backend && npm run test:ci --workspace=workers",
     "dev:backend": "npm run dev --workspace=backend",
     "worker:js": "npm run worker:js --workspace=workers",
-    "worker:java": "npm run worker:java --workspace=workers"
+    "worker:java": "npm run worker:java --workspace=workers",
+    "worker:python": "npm run worker:python --workspace=workers"
   }
 }

@@ -1,4 +1,4 @@
 {
-  "watch": ["javascript", "java", "common", "templates"],
+  "watch": ["javascript", "java", "python", "common", "templates"],
   "ignore": ["common/temp/**", "temp/**", "*.txt"]
 }

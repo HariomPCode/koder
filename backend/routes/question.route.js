@@ -17,7 +17,7 @@ const router = express.Router();
 // /page=2&limit=10
 router.get("/", async (req, res) => {
   const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 20;
+  const limit = Math.min(parseInt(req.query.limit) || 20, 100);
   const skip = (page - 1) * limit;
   const questions = await Question.find({})
     .select({

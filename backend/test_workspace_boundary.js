@@ -28,16 +28,16 @@ async function runBoundaryTests() {
   // 1. @koder/shared exports inspection
   test("@koder/shared exports all required language definitions and validators", () => {
     assert(Array.isArray(shared.SUPPORTED_LANGUAGES), "SUPPORTED_LANGUAGES must be an array");
-    assert.deepStrictEqual(shared.SUPPORTED_LANGUAGES, ["javascript", "java"]);
+    assert.deepStrictEqual(shared.SUPPORTED_LANGUAGES, ["javascript", "java", "python"]);
     assert.strictEqual(typeof shared.isSupportedLanguage, "function");
     assert.strictEqual(typeof shared.normalizeLanguage, "function");
     assert.strictEqual(shared.isSupportedLanguage("javascript"), true);
     assert.strictEqual(shared.isSupportedLanguage("java"), true);
-    assert.strictEqual(shared.isSupportedLanguage("python"), false);
+    assert.strictEqual(shared.isSupportedLanguage("python"), true);
     assert.strictEqual(shared.isSupportedLanguage("cpp"), false);
     assert.strictEqual(shared.normalizeLanguage(" JAVASCRIPT "), "javascript");
     assert.strictEqual(shared.normalizeLanguage("java"), "java");
-    assert.strictEqual(shared.normalizeLanguage("python"), null);
+    assert.strictEqual(shared.normalizeLanguage("python"), "python");
   });
 
   // 2. Queue configuration
@@ -96,6 +96,7 @@ async function runBoundaryTests() {
     assert.strictEqual(typeof shared.generateStarterCode, "function");
     assert.strictEqual(typeof shared.generateJavaScriptRunner, "function");
     assert.strictEqual(typeof shared.generateJavaRunner, "function");
+    assert.strictEqual(typeof shared.generatePythonRunner, "function");
 
     const meta = {
       functionName: "twoSum",
@@ -107,11 +108,13 @@ async function runBoundaryTests() {
     };
 
     const starter = shared.generateStarterCode(meta);
-    assert.strictEqual(starter.length, 2);
+    assert.strictEqual(starter.length, 3);
     assert.strictEqual(starter[0].language, "javascript");
     assert(starter[0].code.includes("function twoSum(nums, target)"));
     assert.strictEqual(starter[1].language, "java");
     assert(starter[1].code.includes("public int[] twoSum(int[] nums, int target)"));
+    assert.strictEqual(starter[2].language, "python");
+    assert(starter[2].code.includes("def twoSum(self, nums: List[int], target: int)"));
 
     const jsRunner = shared.generateJavaScriptRunner(meta, "function twoSum(nums, target) { return [0, 1]; }");
     assert(jsRunner.includes("function parseTestInput"));
@@ -120,6 +123,10 @@ async function runBoundaryTests() {
     const javaRunner = shared.generateJavaRunner(meta, "class Solution { public int[] twoSum(int[] nums, int target) { return new int[]{0, 1}; } }");
     assert(javaRunner.includes("public class Main"));
     assert(javaRunner.includes("class FastScanner"));
+
+    const pythonRunner = shared.generatePythonRunner(meta, "class Solution:\n    def twoSum(self, nums, target):\n        return [0, 1]");
+    assert(pythonRunner.includes("base64.b64decode"));
+    assert(pythonRunner.includes("solution_class = globals().get('Solution')"));
   });
 
   // 6. Shared Mongoose Models & DB calls

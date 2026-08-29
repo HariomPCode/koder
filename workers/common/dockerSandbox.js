@@ -110,9 +110,9 @@ class DockerSandbox {
 
   /**
    * Forcefully kills all worker/language processes inside the container to prevent orphan leaks.
-   * @param {string} [pattern="node|java|javac"]
+   * @param {string} [pattern="node|java|javac|python"]
    */
-  async killAllExecProcesses(pattern = "node|java|javac") {
+  async killAllExecProcesses(pattern = "node|java|javac|python") {
     if (!this.isStarted || this.isDestroyed) return;
     try {
       await new Promise((resolve) => {
