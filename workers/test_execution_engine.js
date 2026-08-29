@@ -152,6 +152,7 @@ async function runTests() {
     });
     const dockerArgs = sandbox.buildDockerRunArgs();
     assert.ok(dockerArgs.includes("--read-only"));
+    assert.ok(dockerArgs.includes("--rm"));
     assert.deepStrictEqual(
       dockerArgs.slice(dockerArgs.indexOf("--user"), dockerArgs.indexOf("--user") + 2),
       ["--user", "1000:1000"],
@@ -164,6 +165,11 @@ async function runTests() {
     assert.ok(dockerArgs.includes("no-new-privileges"));
     assert.ok(dockerArgs.includes("-v"));
     assert.ok(dockerArgs.includes("C:/sandbox/job:/app"));
+    assert.strictEqual(
+      dockerArgs.filter((arg) => arg === "-v").length,
+      1,
+      "submission containers may mount only their per-job /app directory",
+    );
   }
 
   const candidateFiles = [

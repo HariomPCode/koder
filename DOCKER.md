@@ -42,6 +42,13 @@ MongoDB and Redis bind only to loopback. Compose creates its default isolated
 network for the infrastructure services. No privileged containers or Docker
 socket mounts are used.
 
+The host-run workers create the submission containers, so Docker daemon access
+is trusted infrastructure. Do not expose the Docker daemon to application users
+or add `privileged`, host networking, host filesystem mounts, or Docker-socket
+mounts to submission containers. The worker applies its own container controls
+(`--network none`, non-root UID, read-only root, dropped capabilities, PID/CPU/
+memory limits); Docker's built-in seccomp profile must remain enabled.
+
 Stop the services with:
 
 ```powershell

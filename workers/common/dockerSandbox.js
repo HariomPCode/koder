@@ -50,6 +50,7 @@ class DockerSandbox {
     return [
       "run",
       "-d",
+      "--rm",
       "--name",
       this.containerName,
       "--user",

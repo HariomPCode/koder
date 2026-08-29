@@ -58,7 +58,7 @@ The backend exposes `/api/v1` routes for authentication, users, questions, and s
 3. The matching worker loads the submission and question, generates the runner source, creates a namespaced sandbox directory, and starts a Docker container.
 4. Java submissions compile with `javac Main.java`; JavaScript and Python run directly.
 5. The worker streams test cases to the runner and records the first failure or an accepted result in MongoDB.
-6. The worker force-removes the container and removes the sandbox directory in its cleanup path. The frontend polls `GET /api/v1/submissions/:submissionId` for the completed submission.
+6. The worker force-removes the container and removes the sandbox directory in its cleanup path. Containers also use Docker's `--rm` as a fallback after their idle watchdog exits. The frontend polls `GET /api/v1/submissions/:submissionId` for the completed submission.
 
 ## Supported Languages
 
@@ -81,12 +81,21 @@ The sandbox is configured with these Docker controls:
 | Network | `--network none` |
 | Linux capabilities | `--cap-drop ALL` |
 | Privilege escalation | `--security-opt no-new-privileges` |
+| Syscall policy | Docker's built-in seccomp profile |
 | Runtime user | `--user 1000:1000` |
 | Root filesystem | `--read-only` |
 | Temporary filesystem | `--tmpfs /tmp:size=64m` |
 | Work directory | writable bind mount of the per-job directory at `/app` |
 
 On timeout or execution cleanup, the sandbox attempts to kill matching `node`, `java`, `javac`, and `python` processes before the container is removed.
+
+For Java runners, the generated harness also installs a narrow `SecurityManager`
+guard after the JVM has started. It denies normal Java APIs for child-process
+creation, environment-variable lookup, filesystem access outside `/app`, and
+socket access. This is defense in depth only: the Docker container is the
+security boundary. The guard is retained because Docker seccomp cannot deny
+`execve` for a `docker exec` process without also preventing the JVM from
+starting. It must not be treated as a substitute for container isolation.
 
 ### Cross-language sandbox isolation
 
@@ -110,6 +119,10 @@ BullMQ job IDs are scoped to a queue, so different language queues can each prod
 | Batch size | 50 test cases |
 
 The shared verdict contract defines `Accepted`, `Wrong Answer`, `Runtime Error`, `Time Limit Exceeded`, `Compilation Error`, and `Memory Limit Exceeded`. The engine currently assigns the first five: compilation errors apply to Java, timeouts are enforced by the watchdogs, and a process failure or non-`OK` runner response is a runtime error. It stops at the first failing test case. Output comparison first normalizes surrounding whitespace and line endings, then also supports JSON-equivalent values, boolean case normalization, and sequence-style whitespace/comma formatting.
+
+The container memory cgroup is enforced at 256 MiB. An allocation failure is
+currently reported as a runtime failure rather than a distinct memory verdict;
+the limit prevents the allocation from escaping the container.
 
 ## Queue Architecture
 
@@ -228,6 +241,7 @@ The project uses Node scripts and built-in `assert`; it does not use an external
 | `npm run test:ci --workspace=backend` | backend | five backend test scripts |
 | `npm run test:ci --workspace=workers` | workers | `test_execution_engine.js` |
 | `npm run test:docker --workspace=workers` | workers | `test_python_docker.js`; requires Docker |
+| `npm run test:security --workspace=workers` | workers | `test_java_sandbox_security.js`; requires Docker and checks Java API guards, resource limits, and cleanup |
 | `npm run test:smoke --workspace=workers` | workers | manual Docker/MongoDB smoke scripts |
 
 `workers/test_sandbox_collision_docker.js` directly checks the cross-language sandbox collision fix, but it is not included in a package script. Run it manually when Docker is available:
@@ -252,6 +266,7 @@ node workers/test_sandbox_collision_docker.js
 
 - Worker concurrency is the BullMQ default of one job per language worker process; configurable concurrency and horizontal scaling are not implemented.
 - Docker enforces the memory cap, but the engine does not measure memory usage or assign `Memory Limit Exceeded`; an out-of-memory failure can surface as a runtime error.
+- The Docker daemon is part of the trusted computing base. Run workers only on a host where the daemon is not exposed to untrusted users, keep Docker's built-in seccomp/AppArmor (or equivalent) enabled, and do not add host mounts, Docker-socket mounts, host networking, or privileged mode to submission containers.
 - `seedProblems.js` and `promoteAdmin.js` require `backend/.env` in addition to the root `.env` workflow.
 - `test_sandbox_collision_docker.js` is manual rather than wired into an npm script.
 - No CI workflow is present in the repository.

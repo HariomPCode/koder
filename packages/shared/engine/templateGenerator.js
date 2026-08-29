@@ -395,6 +395,80 @@ ${wrappedBody}
 // ==========================================
 public class Main {
 
+    /*
+     * This is defense in depth, not the sandbox boundary: Docker supplies the
+     * OS isolation and resource limits. It closes the normal Java APIs that
+     * would otherwise let a submission start processes or inspect the runner.
+     */
+    static final class SubmissionGuard extends SecurityManager {
+        private static final java.nio.file.Path APP_DIRECTORY =
+            java.nio.file.Paths.get("/app").toAbsolutePath().normalize();
+
+        private static boolean isSubmissionFile(String file) {
+            if (file == null) return false;
+            try {
+                return java.nio.file.Paths.get(file).toAbsolutePath().normalize()
+                    .startsWith(APP_DIRECTORY);
+            } catch (Exception ignored) {
+                return false;
+            }
+        }
+
+        @Override public void checkExec(String command) {
+            throw new SecurityException("Process execution is not permitted");
+        }
+
+        @Override public void checkRead(String file) {
+            if (!isSubmissionFile(file)) {
+                throw new SecurityException("Reading outside /app is not permitted");
+            }
+        }
+
+        @Override public void checkWrite(String file) {
+            if (!isSubmissionFile(file)) {
+                throw new SecurityException("Writing outside /app is not permitted");
+            }
+        }
+
+        @Override public void checkDelete(String file) {
+            throw new SecurityException("Deleting files is not permitted");
+        }
+
+        @Override public void checkConnect(String host, int port) {
+            throw new SecurityException("Network access is not permitted");
+        }
+
+        @Override public void checkListen(int port) {
+            throw new SecurityException("Network access is not permitted");
+        }
+
+        @Override public void checkAccept(String host, int port) {
+            throw new SecurityException("Network access is not permitted");
+        }
+
+        @Override public void checkPermission(java.security.Permission permission) {
+            if (permission instanceof RuntimePermission) {
+                String name = permission.getName();
+                if ("setSecurityManager".equals(name) || name.startsWith("getenv.")) {
+                    throw new SecurityException("Permission is not granted: " + name);
+                }
+            }
+        }
+    }
+
+    static void installSubmissionGuard() {
+        // Socket construction lazily initializes LinuxSocketOptions by loading
+        // a JDK native library. Do that before checkRead is restricted so the
+        // user's subsequent connect attempt reaches checkConnect instead.
+        // An unconnected socket does not make a network connection.
+        try (java.net.Socket ignored = new java.net.Socket()) {
+            // Deliberately empty: construction performs the required JDK setup.
+        } catch (java.io.IOException impossible) {
+            throw new IllegalStateException("Unable to initialize Java networking", impossible);
+        }
+        System.setSecurityManager(new SubmissionGuard());
+    }
+
     public static String runTestCase(String rawInput) throws Exception {
         FastScanner sc = new FastScanner(rawInput);
         if (!sc.hasNext()) return "";
@@ -411,6 +485,8 @@ public class Main {
         PrintStream protocolOut = System.out;
         PrintStream protocolErr = System.err;
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+
+        installSubmissionGuard();
 
         ByteArrayOutputStream userOutSink = new ByteArrayOutputStream();
         PrintStream userOutCapture = new PrintStream(userOutSink, true, StandardCharsets.UTF_8);
@@ -464,7 +540,9 @@ public class Main {
                     System.setOut(protocolOut);
                     System.setErr(protocolErr);
 
-                    String errMsg = t.getClass().getName() + ": " + t.getMessage();
+                    StringWriter stack = new StringWriter();
+                    t.printStackTrace(new PrintWriter(stack));
+                    String errMsg = stack.toString();
                     String b64Err = Base64.getEncoder().encodeToString(errMsg.getBytes(StandardCharsets.UTF_8));
                     protocolOut.println(caseId + " ERROR " + b64Err);
                     protocolOut.flush();
