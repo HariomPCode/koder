@@ -1,93 +1,70 @@
 const express = require("express");
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
-const User = require("../models/User");
+const AuthService = require("../services/auth.service");
+const AppError = require("../errors/appError");
 const router = express.Router();
 
-const authCookieOptions = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-  path: "/",
-  maxAge: 30 * 24 * 60 * 60 * 1000,
-};
+const authCookieOptions = AuthService.getAuthCookieOptions();
 
-router.post("/signup", async (req, res) => {
-  const { firstName, lastName, email, password } = req.body;
+router.post("/signup", async (req, res, next) => {
+  try {
+    const { firstName, lastName, email, password } = req.body;
 
-  if (!firstName || !lastName || !email || !password) {
+    if (!firstName || !lastName || !email || !password) {
+      return res.json({
+        message: "All fields are required",
+      });
+    }
+
+    const { token } = await AuthService.signup({ firstName, lastName, email, password });
+
+    res.cookie("auth_token", token, authCookieOptions);
+
     return res.json({
-      message: "All fields are required",
+      message: "User Created Successfully",
     });
+  } catch (error) {
+    if (error instanceof AppError && error.statusCode === 409) {
+      return res.json({
+        message: "User already exists",
+      });
+    }
+
+    if (error instanceof AppError && error.statusCode === 400) {
+      return res.json({
+        message: error.message,
+      });
+    }
+
+    return next(error);
   }
-
-  const user = await User.findOne({ email });
-
-  if (user) {
-    return res.json({
-      message: "User already exists",
-    });
-  }
-
-  const hashedPassword = await bcrypt.hash(password, 12);
-
-  const userCreated = await User.create({
-    firstName,
-    lastName,
-    email,
-    password: hashedPassword,
-    role: "user",
-  });
-
-  const token = await jwt.sign(
-    { userId: userCreated._id },
-    process.env.JWT_SECRET,
-    { expiresIn: "30d" },
-  );
-
-  res.cookie("auth_token", token, authCookieOptions);
-
-  return res.json({
-    message: "User Created Successfully",
-  });
 });
 
-router.post("/signin", async (req, res) => {
-  const { email, password } = req.body;
+router.post("/signin", async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
 
-  if (!email || !password) {
+    if (!email || !password) {
+      return res.json({
+        message: "Email or password is missing",
+      });
+    }
+
+    const { token } = await AuthService.signin({ email, password });
+
+    res.cookie("auth_token", token, authCookieOptions);
+
     return res.json({
-      message: "Email or password is missing",
+      message: "User signed in successfully",
     });
+  } catch (error) {
+    if (error instanceof AppError && error.statusCode === 400) {
+      return res.json({
+        message: "Either email or password is incorrect",
+      });
+    }
+
+    return next(error);
   }
-
-  const checkUser = await User.findOne({ email });
-
-  if (!checkUser) {
-    return res.json({
-      message: "Either email or password is incorrect",
-    });
-  }
-
-  const checkHashed = await bcrypt.compare(password, checkUser.password);
-
-  if (!checkHashed) {
-    return res.json({
-      message: "Either email or password is incorrect",
-    });
-  }
-
-  const token = await jwt.sign(
-    { userId: checkUser._id },
-    process.env.JWT_SECRET,
-    { expiresIn: "30d" },
-  );
-
-  res.cookie("auth_token", token, authCookieOptions);
-
-  return res.json({
-    message: "User signed in successfully",
-  });
 });
 
 router.post("/signout", (req, res) => {

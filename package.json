@@ -15,5 +15,8 @@
     "worker:js": "npm run worker:js --workspace=workers",
     "worker:java": "npm run worker:java --workspace=workers",
     "worker:python": "npm run worker:python --workspace=workers"
+  },
+  "devDependencies": {
+    "ioredis": "^5.11.1"
   }
 }

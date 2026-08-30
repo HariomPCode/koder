@@ -322,7 +322,11 @@ function createExecutionExecutor(config, dependencies = {}) {
         });
       }
 
-      return await saveSubmission(submissionId, result);
+      const saved = await saveSubmission(submissionId, result);
+      if (!saved) {
+        return { status: "already-completed", submissionId, skipped: true };
+      }
+      return saved;
     } finally {
       await sandbox.destroy();
       removeSandboxDirectory(jobDir);

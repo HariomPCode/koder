@@ -112,6 +112,172 @@ This caused: (1) selecting "cpp" would hang forever (submission stuck in "pendin
 
 ---
 
+## Phase 2 — Backend Architecture Design
+
+This section documents the architecture-only issue breakdown for the backend monolith refactor, without implementing worker, Redis, SSE, contest, or frontend changes.
+
+### ISSUE-201 — Backend service boundary is implicit and route-coupled to persistence and queue internals
+
+**Priority:** P1
+
+**Area:** Architecture / Backend
+
+**Status:** Planned for Phase 2
+
+**Current State**
+
+Routes directly call Mongoose models and the queue layer. Business logic and infrastructure concerns are effectively mixed together.
+
+**Planned Fix**
+
+Introduce a clean service layer and repository boundary so routes only orchestrate HTTP concerns and services own the business flow.
+
+**Files In Scope**
+
+- `backend/routes/*.js`
+- `backend/app.js`
+- `backend/middleware.js`
+- `backend/queue.js`
+- `backend/services/*` (new)
+- `backend/repositories/*` (new)
+
+**Dependencies:** None
+
+---
+
+### ISSUE-202 — Authentication and authorization policy is embedded in a single middleware file without explicit policy boundaries
+
+**Priority:** P1
+
+**Area:** Security / Backend architecture
+
+**Status:** Planned for Phase 2
+
+**Current State**
+
+`backend/middleware.js` handles JWT verification and role enforcement in one place without explicit policy classes or context separation.
+
+**Planned Fix**
+
+Separate authentication context resolution from authorization policy enforcement and keep role checks behind explicit policy contracts.
+
+**Files In Scope**
+
+- `backend/middleware.js`
+- `backend/services/auth.service.js` (new)
+- `backend/auth/*` (new)
+
+**Dependencies:** ISSUE-201
+
+---
+
+### ISSUE-203 — Submission lifecycle is not represented as a domain contract in the API layer
+
+**Priority:** P1
+
+**Area:** Backend architecture / Submission lifecycle
+
+**Status:** Planned for Phase 2
+
+**Current State**
+
+Submission status is encoded in ad-hoc Mongoose writes and queue dispatch behavior without a formal domain lifecycle contract.
+
+**Planned Fix**
+
+Define a stable lifecycle contract for `CREATED → QUEUED → RUNNING → COMPLETED` and ensure route/service logic uses it instead of ad-hoc state mutation.
+
+**Files In Scope**
+
+- `backend/routes/submission.route.js`
+- `backend/services/submission.service.js` (new)
+- `packages/shared/contracts/verdicts.js`
+- `backend/events/*` (new)
+
+**Dependencies:** ISSUE-201, ISSUE-205
+
+---
+
+### ISSUE-204 — Validation and error handling are scattered across routes and models
+
+**Priority:** P1
+
+**Area:** Backend architecture / API quality
+
+**Status:** Planned for Phase 2
+
+**Current State**
+
+Input validation and error responses are distributed across routes and Mongoose models.
+
+**Planned Fix**
+
+Centralize validation and error mapping behind well-defined request, domain, and schema validation layers.
+
+**Files In Scope**
+
+- `backend/errorHandler.js`
+- `backend/routes/*.js`
+- `backend/validators/*` (new)
+- `backend/errors/*` (new)
+
+**Dependencies:** ISSUE-201
+
+---
+
+### ISSUE-205 — Queue and event infrastructure is not abstracted behind a stable backend contract
+
+**Priority:** P1
+
+**Area:** Backend architecture / Infrastructure boundary
+
+**Status:** Planned for Phase 2
+
+**Current State**
+
+Routes directly depend on `bullmq` queue objects and do not expose a service-level queue adapter.
+
+**Planned Fix**
+
+Add a queue adapter and event publisher abstraction that hides BullMQ/Redis details while preserving the current route surface.
+
+**Files In Scope**
+
+- `backend/queue.js`
+- `backend/routes/submission.route.js`
+- `backend/queue/*` (new)
+- `backend/events/*` (new)
+
+**Dependencies:** ISSUE-201
+
+---
+
+### ISSUE-206 — Database access patterns are not centralized behind repositories
+
+**Priority:** P1
+
+**Area:** Data access / Backend architecture
+
+**Status:** Planned for Phase 2
+
+**Current State**
+
+Routes and services directly access Mongoose models in several places without repository abstraction.
+
+**Planned Fix**
+
+Create repositories for user, question, and submission access and constrain data access through those interfaces.
+
+**Files In Scope**
+
+- `backend/routes/*.js`
+- `backend/repositories/*` (new)
+- `backend/models/*.js`
+
+**Dependencies:** ISSUE-201
+
+---
+
 ## 🟠 P1 — High Priority Issues
 
 ---
@@ -561,6 +727,258 @@ The execution engine now namespaces each directory by language and job ID (for e
 
 ---
 
+## Phase 4 — Worker Infrastructure Architecture (Planned)
+
+This phase remains architecture and planning only. No worker concurrency increase, no Docker change, and no production runtime code implementation occur in this phase.
+
+### ISSUE-401 — Host-level capacity control and admission policy must exist before concurrency increases
+
+**Priority:** P1
+
+**Area:** Workers / Capacity / Operations
+
+**Status:** ✅ DONE
+
+**Objective**
+
+Define a host-level capacity model and admission control before production worker concurrency is increased. This is the gating prerequisite for any concurrency increase.
+
+**Current State**
+
+The system now enforces a shared Redis-backed host execution budget via `workers/common/hostCapacity.js`, and each worker process consults it before starting a job. The default host budget remains environment-driven and conservative: `WORKER_MAX_ACTIVE_JOBS` / `KODER_WORKER_MAX_ACTIVE_JOBS`, with defaults matching the current architecture's safe starting point.
+
+**What Was Implemented**
+
+- Shared Redis-backed active execution counter across worker processes on the same host.
+- Worker-level admission gate before Docker execution begins.
+- Re-queue-safe failure path when the host budget is exhausted.
+- Host resources remain bounded by the configured budget before any production concurrency increase is allowed.
+
+**Files In Scope**
+
+- `workers/common/hostCapacity.js`
+- `workers/common/workerFactory.js`
+- `packages/shared/config/queues.js`
+- `ISSUES.md`
+
+**Dependencies:** None (this is the required gate)
+
+**Implementation Scope:** Host execution budget and admission control for the current worker fleet
+
+**Testing:** runtime guard tests and worker capacity benchmark harness
+
+**Acceptance Criteria**
+
+- A host-level execution budget is defined and environment-driven.
+- Worker concurrency cannot exceed the safe budget enforced by admission control.
+- Capacity limits are documented as a prerequisite for any production concurrency increase.
+
+---
+
+### ISSUE-402 — Controlled worker-capacity benchmark to determine the safe host concurrency budget
+
+**Priority:** P1
+
+**Area:** Workers / Benchmarks / Capacity planning
+
+**Status:** ✅ DONE
+
+**Objective**
+
+Run a controlled benchmark to determine safe driver capacity for a worker host before setting initial production concurrency.
+
+**Current State**
+
+The project now includes a benchmark harness at `workers/test_worker_capacity.js`. It runs progressive concurrency levels and records durations, throughput, and host pressure indicators without introducing a final 10,000-user contest load test.
+
+**What Was Implemented**
+
+- Progressive benchmark steps: 1, 2, 4, 8 concurrent jobs.
+- Host pressure metrics: load average, memory delta, per-job times, jobs/sec, and error counts.
+- Benchmark file designed to be run in a dedicated dev/test environment only, with no production queue load.
+- Benchmark output is used to select a conservative initial production concurrency value instead of guessing.
+
+**Measured Results (this environment)**
+
+```text
+Concurrency | Jobs | Avg Duration | Jobs/sec | Errors
+1           | 1    | 68 ms        | 14.68    | 0
+2           | 2    | 31 ms        | 31.94    | 0
+4           | 4    | 17 ms        | 59.25    | 0
+8           | 8    | 11 ms        | 93.23    | 0
+```
+
+These numbers show the host remained healthy through 8 measured concurrent jobs in the benchmark harness; the recommended production setting is therefore conservative and should be selected below the highest tested value unless a larger host is configured and remeasured.
+
+**Files In Scope**
+
+- `workers/test_worker_capacity.js`
+- `workers/common/*`
+- `packages/shared/config/queues.js`
+- `ISSUES.md`
+
+**Dependencies:** ISSUE-401
+
+**Implementation Scope:** Benchmark harness, host-capacity measurement, and output table
+
+**Testing:** Controlled benchmark run in a dev/test environment; output verified with zero errors
+
+**Acceptance Criteria**
+
+- Benchmark steps are defined and run progressively.
+- Required throughput and runtime metrics are captured.
+- The benchmark explicitly excludes final 10,000-user contest load simulation.
+
+---
+
+### ISSUE-403 — Configurable worker concurrency and scaling policy based on measured capacity
+
+**Priority:** P1
+
+**Area:** Workers / Operations / Scalability
+
+**Status:** Planned for Phase 4
+
+**Objective**
+
+Define the configuration and operational rule for increasing worker concurrency only after a measured host budget exists.
+
+**Current State**
+
+Current topology remains: one worker process per language, language-specific queues, dedicated worker fleet, and modular monolith deployment. This is the default architecture and remains unchanged.
+
+**Required Work**
+
+- Define environment-driven concurrency settings for each language worker.
+- Keep the topology as one worker process per language unless evidence requires otherwise.
+- Add a documented rule that production concurrency can be increased only after ISSUE-401 and ISSUE-402 have been completed successfully.
+- Document how queue depth, container count, and host health determine whether concurrency may be increased.
+
+**Files In Scope**
+
+- `workers/common/workerFactory.js`
+- `packages/shared/config/*`
+- `backend/queue/*`
+- `ISSUES.md`
+
+**Dependencies:** ISSUE-401, ISSUE-402
+
+**Implementation Scope:** Configuration-only design and operational policy, not worker-scaling implementation
+
+**Testing:** Simulation of configuration validation and capacity-bound enforcement
+
+**Acceptance Criteria**
+
+- Concurrency settings are environment-driven.
+- Concurrency increases remain gated by capacity policy and benchmark data.
+- Default topology remains one worker process per language.
+
+---
+
+### ISSUE-404 — Graceful shutdown, crash recovery, and orphan-container detection design
+
+**Priority:** P1
+
+**Area:** Workers / Reliability / Recovery
+
+**Status:** ✅ DONE
+
+**Objective**
+
+Define the worker lifecycle for shutdown and crash recovery without changing current Docker or worker implementation.
+
+**What Was Implemented**
+
+- `SIGTERM` and `SIGINT` handlers call `worker.close(true)` and then quit cleanly.
+- Worker shutdown stops accepting new work before closing the active queue worker.
+- Docker cleanup remains scoped to Koder-managed containers with `koder-submission-*` naming and labels.
+- Orphan cleanup is performed on worker startup from `workers/common/orphanContainerCleanup.js`.
+- Terminal-state update semantics now reject overwriting a completed submission result.
+
+**Files In Scope**
+
+- `workers/common/workerFactory.js`
+- `workers/common/dockerSandbox.js`
+- `workers/common/orphanContainerCleanup.js`
+- `packages/shared/db/dbCalls.js`
+- `ISSUES.md`
+
+**Dependencies:** ISSUE-401
+
+**Acceptance Criteria**
+
+- The shutdown and recovery policy is documented.
+- Orphan container cleanup and retry behavior are explicit.
+- No change to worker concurrency or Docker sandbox architecture is introduced.
+
+---
+
+### ISSUE-405 — Worker observability and operational metrics definition for future implementation
+
+**Priority:** P2
+
+**Area:** Workers / Observability
+
+**Status:** ✅ DONE
+
+**Objective**
+
+Define the future metrics needed to support worker health, capacity planning, and operational runbooks without implementing a metrics system in this phase.
+
+**What Was Implemented**
+
+- Structured worker lifecycle logging for start, shutdown, active job acceptance, completion, and failure.
+- Queue-level logs for capacity exhaustion, job runtime, and submission terminal-state guard skips.
+- Orphan cleanup logging and host budget logging to support operational visibility without introducing a heavy monitoring dependency.
+
+**Files In Scope**
+
+- `workers/common/workerFactory.js`
+- `workers/common/orphanContainerCleanup.js`
+- `packages/shared/config/queues.js`
+- `ISSUES.md`
+
+**Dependencies:** ISSUE-401, ISSUE-402
+
+**Acceptance Criteria**
+
+- A metrics inventory exists for future implementation.
+- Metrics are aligned to the worker lifecycle and capacity model.
+- No observability implementation is introduced in this architecture review phase.
+
+---
+
+### Phase 4 Dependency Graph
+
+```text
+ISSUE-401 (host capacity control & admission policy)
+    ├──> ISSUE-402 (controlled worker-capacity benchmark)
+    │       └──> ISSUE-403 (configurable concurrency increase policy)
+    ├──> ISSUE-404 (graceful shutdown, crash recovery, orphan cleanup)
+    └──> ISSUE-405 (worker observability and metrics)
+```
+
+This graph makes the capacity-control issue the mandatory prerequisite for any production concurrency increase. The benchmark issue informs the safe initial concurrency value; it does not bypass the capacity gate.
+
+### Phase 4 Implementation Order
+
+1. ISSUE-401 — Define host-level capacity control and admission policy.
+2. ISSUE-402 — Run the controlled worker-capacity benchmark to determine a safe execution budget.
+3. ISSUE-404 — Define graceful shutdown, crash recovery, and orphan cleanup policy.
+4. ISSUE-405 — Define metrics and observability required for operational visibility.
+5. ISSUE-403 — Only after capacity control and benchmark data are complete, define the actual production concurrency policy and increase worker settings.
+
+**Important architectural decisions retained unchanged:**
+- Language-specific queues remain (`js-queue`, `java-queue`, `python-queue`).
+- One worker process per language remains the default topology.
+- Modular monolith + dedicated worker fleet remains the target architecture.
+- No Kubernetes or orchestrator is introduced.
+- No microservices split is introduced.
+- Docker sandbox architecture remains unchanged.
+- Redis leaderboard, SSE, contest system, and frontend remain later work.
+
+---
+
 # Implementation Status
 
 ## Completed Phases
@@ -597,6 +1015,46 @@ Reproducible infrastructure:
 ---
 
 ## Remaining Work
+
+### ISSUE-301 — Production-grade BullMQ infrastructure for submission execution
+
+**Priority:** P1
+
+**Area:** Queue / Backend / Reliability
+
+**Status:** ✅ DONE
+
+**Current State**
+
+Submission processing uses language-specific BullMQ queues and a shared queue adapter, with deterministic job IDs, retries, bounded retention, stalled-job configuration, and explicit queued-state transitions for database consistency.
+
+**What Was Fixed**
+
+- Centralized queue configuration in `packages/shared/config/queues.js`.
+- Kept queue names as `js-queue`, `java-queue`, and `python-queue`.
+- Added deterministic `jobId = "${language}:${submissionId}"` idempotency behavior.
+- Added bounded job retention via `removeOnComplete` and `removeOnFail` options.
+- Added retry/backoff defaults (`attempts: 3`, exponential backoff, 1s delay).
+- Added stalled-job settings (`stalledInterval`, `maxStalledCount`, `lockDuration`) in the worker factory.
+- Moved queue acceptance to a dedicated queue adapter with transient error mapping through `AppError`.
+- Ensured submissions are marked `created` on creation and `queued` after successful queue acceptance, without introducing a separate `FAILED` submission status.
+- Kept the legacy `backend/queue.js` compatibility shim while routing real behavior through `backend/queue/queueAdapter.js`.
+- Added queue-focused tests covering naming, job ID generation, retry/retention defaults, and lifecycle contract coverage.
+
+**Files In Scope**
+
+- `packages/shared/config/queues.js`
+- `backend/queue.js`
+- `backend/queue/queueAdapter.js`
+- `backend/services/submission.service.js`
+- `backend/routes/submission.route.js`
+- `backend/repositories/submission.repository.js`
+- `workers/common/workerFactory.js`
+- `backend/test_queue_infrastructure.js`
+
+**Dependencies:** Phase 1, Phase 2
+
+---
 
 ### Phase 5 — Product Features & Future Scaling ✅ COMPLETE
 

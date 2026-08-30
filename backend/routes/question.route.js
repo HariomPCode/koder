@@ -1,58 +1,41 @@
 const express = require("express");
-const middleware = require("../middleware");
-const Question = require("../models/Question");
-const Submission = require("../models/Submission");
+const QuestionService = require("../services/question.service");
 
 const router = express.Router();
 
-/*
-    / -> get all questions
-    post : / -> create a question --- Not a public api
+router.get("/", async (req, res, next) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const questions = await QuestionService.listQuestions({ page, limit });
 
-    post : /submission/:questionId -> {lang, code, questionId}
-
-*/
-
-// /page=2&limit=10
-router.get("/", async (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-  const limit = Math.min(parseInt(req.query.limit) || 20, 100);
-  const skip = (page - 1) * limit;
-  const questions = await Question.find({})
-    .select({
-      questionNum: 1,
-      title: 1,
-      slug: 1,
-      difficulty: 1,
-      tags: 1,
-    })
-    .sort({ questionNum: 1 })
-    .skip(skip)
-    .limit(limit);
-
-  return res.json({
-    message: "Questions loaded successfully",
-    questions,
-  });
+    return res.json({
+      message: "Questions loaded successfully",
+      questions,
+    });
+  } catch (error) {
+    return next(error);
+  }
 });
 
-router.get("/:slug", async (req, res) => {
-  const slug = req.params.slug;
+router.get("/:slug", async (req, res, next) => {
+  try {
+    const slug = req.params.slug;
+    const question = await QuestionService.getQuestionBySlug(slug);
 
-  const question = await Question.findOne({ slug }).select({
-    hiddenTestCases: 0,
-  });
+    if (!question) {
+      return res.json({
+        message: "Invalid request",
+      });
+    }
 
-  if (!question) {
     return res.json({
-      message: "Invalid request",
+      message: "Question fetched successfully",
+      question,
     });
+  } catch (error) {
+    return next(error);
   }
-
-  return res.json({
-    message: "Question fetched successfully",
-    question,
-  });
 });
 
 module.exports = router;

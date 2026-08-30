@@ -4,7 +4,7 @@
   "main": "javascript/worker.js",
   "scripts": {
     "test": "npm run test:ci",
-    "test:ci": "node test_execution_engine.js",
+    "test:ci": "node test_execution_engine.js && node test_worker_runtime_guard.js && node test_worker_capacity.js",
     "test:docker": "node test_python_docker.js",
     "test:security": "node test_java_sandbox_security.js",
     "test:smoke": "node test_admin_flow.js && node test_advanced.js && node test_comprehensive.js && node test_generic_architecture.js && node test_hardened.js",

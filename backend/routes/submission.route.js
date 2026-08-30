@@ -1,22 +1,9 @@
 const express = require("express");
-const Question = require("../models/Question");
-const Submission = require("../models/Submission");
-const { jsQueue, javaQueue, pythonQueue } = require("../queue");
 const middleware = require("../middleware");
-const {
-  SUPPORTED_LANGUAGES,
-  isSupportedLanguage,
-  normalizeLanguage,
-} = require("@koder/shared");
-
+const SubmissionService = require("../services/submission.service");
+const AppError = require("../errors/appError");
 
 const router = express.Router();
-
-const LANGUAGE_QUEUES = {
-  javascript: jsQueue,
-  java: javaQueue,
-  python: pythonQueue,
-};
 
 router.post("/:questionId", middleware, async (req, res, next) => {
   try {
@@ -24,101 +11,75 @@ router.post("/:questionId", middleware, async (req, res, next) => {
     const userId = req.userId;
     const questionId = req.params.questionId;
 
-    if (!language || !isSupportedLanguage(language)) {
-      return res.status(400).json({
-        message: `Unsupported language: '${language}'. Supported languages are: ${SUPPORTED_LANGUAGES.join(", ")}`,
-      });
-    }
-
-    if (!code || typeof code !== "string" || !code.trim()) {
-      return res.status(400).json({
-        message: "Code is required",
-      });
-    }
-
-    const normalizedLang = normalizeLanguage(language);
-
-    const question = await Question.findById(questionId);
-
-    if (!question) {
-      return res.status(404).json({
-        message: "Question does not exist",
-      });
-    }
-
-    const targetQueue = LANGUAGE_QUEUES[normalizedLang];
-    if (!targetQueue) {
-      return res.status(400).json({
-        message: `No queue configured for language: ${normalizedLang}`,
-      });
-    }
-
-    const submission = await Submission.create({
+    const result = await SubmissionService.createSubmission({
       userId,
       questionId,
+      language,
       code,
-      language: normalizedLang,
-      status: "pending",
     });
 
-    await targetQueue.add("execute", {
-      submissionId: submission._id,
-    });
-
-    return res.status(200).json({
-      submissionId: submission._id,
-      status: "processing",
-    });
+    return res.status(200).json(result);
   } catch (error) {
+    if (error instanceof AppError && error.statusCode === 404) {
+      return res.status(404).json({
+        message: error.message,
+      });
+    }
+
+    if (error instanceof AppError && error.statusCode === 400) {
+      return res.status(400).json({
+        message: error.message,
+      });
+    }
+
+    if (error instanceof AppError && error.statusCode === 503) {
+      return res.status(503).json({
+        message: error.message,
+      });
+    }
+
     return next(error);
   }
 });
 
 router.get("/:submissionId", middleware, async (req, res, next) => {
   try {
-    const submission = await Submission.findOne({
-      _id: req.params.submissionId,
+    const submission = await SubmissionService.getSubmissionById({
       userId: req.userId,
+      submissionId: req.params.submissionId,
     });
 
-    if (!submission) {
+    return res.json({ submission });
+  } catch (error) {
+    if (error instanceof AppError && error.statusCode === 404) {
       return res.status(404).json({
         message: "Submission not found",
       });
     }
-
-    return res.json({
-      submission,
-    });
-  } catch (error) {
     return next(error);
   }
 });
 
-router.get("/question/:questionId", middleware, async (req, res) => {
-  const { questionId } = req.params;
-  const userId = req.userId;
+router.get("/question/:questionId", middleware, async (req, res, next) => {
+  try {
+    const { questionId } = req.params;
+    const userId = req.userId;
 
-  if (!questionId) {
-    return res.json({
-      message: "Invalid Question Id",
-    });
+    if (!questionId) {
+      return res.json({
+        message: "Invalid Question Id",
+      });
+    }
+
+    const result = await SubmissionService.getUserQuestionSubmissions({ userId, questionId });
+    if (result.message) {
+      return res.json({ message: result.message });
+    }
+
+    return res.json(result);
+  } catch (error) {
+    return next(error);
   }
-
-  const submissions = await Submission.find({
-    questionId,
-    userId,
-  });
-
-  if (submissions.length === 0) {
-    return res.json({
-      message: "No submissions made for this problem",
-    });
-  }
-
-  return res.json({
-    submissions,
-  });
 });
 
 module.exports = router;

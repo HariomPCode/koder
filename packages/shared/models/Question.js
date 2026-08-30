@@ -96,6 +96,8 @@ const questionSchema = new mongoose.Schema(
   },
 );
 
+questionSchema.index({ tags: 1 });
+
 const Question = mongoose.models.Question || mongoose.model("Question", questionSchema);
 
 module.exports = Question;

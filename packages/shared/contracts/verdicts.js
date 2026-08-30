@@ -1,8 +1,15 @@
 /**
  * Canonical submission statuses and judge verdicts.
+ *
+ * NOTE:
+ * - The production lifecycle is CREATED -> QUEUED -> RUNNING -> COMPLETED.
+ * - PENDING is retained as a legacy compatibility alias for historical records and
+ *   older code paths until the broader worker and API state machine is fully migrated.
  */
 
 const SUBMISSION_STATUS = Object.freeze({
+  CREATED: "created",
+  QUEUED: "queued",
   PENDING: "pending",
   RUNNING: "running",
   COMPLETED: "completed",

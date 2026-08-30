@@ -33,9 +33,10 @@ class DockerSandbox {
     this.tmpfsSize = tmpfsSize;
     this.idleTimeoutSeconds = idleTimeoutSeconds;
 
-    // Unique container name per submission execution
+    // Unique container name per submission execution. Prefix is intentionally
+    // Koder-scoped so cleanup routines can identify and remove only managed sandboxes.
     const randomSuffix = Math.random().toString(36).substring(2, 8);
-    this.containerName = `sandbox-${this.jobId}-${Date.now()}-${randomSuffix}`;
+    this.containerName = `koder-submission-${this.jobId}-${Date.now()}-${randomSuffix}`;
     this.isStarted = false;
     this.isDestroyed = false;
   }
@@ -53,6 +54,10 @@ class DockerSandbox {
       "--rm",
       "--name",
       this.containerName,
+      "--label",
+      "koder.worker=koder",
+      "--label",
+      `koder.jobId=${this.jobId}`,
       "--user",
       this.user,
       "--network",

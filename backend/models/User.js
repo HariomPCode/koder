@@ -23,6 +23,18 @@ const userSchema = new Schema(
       type: String,
       required: true,
     },
+    rating: {
+      type: Number,
+      default: 1200,
+    },
+    contestsParticipated: {
+      type: Number,
+      default: 0,
+    },
+    highestRating: {
+      type: Number,
+      default: 1200,
+    },
     role: {
       type: String,
       enum: ["user", "admin"],

@@ -1,5 +1,6 @@
 const Submission = require("../models/Submission");
 const Question = require("../models/Question");
+const { SUBMISSION_STATUS } = require("../contracts/verdicts");
 
 async function getQuestionDetails(submissionId, { SubmissionModel = Submission, QuestionModel = Question } = {}) {
   const submission = await SubmissionModel.findById({ _id: submissionId });
@@ -25,19 +26,41 @@ async function getQuestionDetails(submissionId, { SubmissionModel = Submission, 
   };
 }
 
-async function updateSubmission(submissionId, result, { SubmissionModel = Submission } = {}) {
-  const submission = await SubmissionModel.findByIdAndUpdate(
-    { _id: submissionId },
+async function markSubmissionRunning(submissionId, { SubmissionModel = Submission } = {}) {
+  return SubmissionModel.findOneAndUpdate(
     {
-      status: result.status,
-      verdict: result.verdict,
-      passedTestCases: result.passed,
-      totalTestCases: result.total,
-      maxRuntime: result.maxRuntime,
-      totalRuntime: result.totalRuntime,
-      memory: result.memory,
-      failedTestCase: result.failedTestCase,
-      errorMessage: result.errorMessage,
+      _id: submissionId,
+      status: { $ne: SUBMISSION_STATUS.COMPLETED },
+    },
+    {
+      $set: { status: SUBMISSION_STATUS.RUNNING },
+    },
+    {
+      new: true,
+      runValidators: true,
+    },
+  );
+}
+
+async function updateSubmission(submissionId, result, { SubmissionModel = Submission } = {}) {
+  const terminalStatus = result.status || SUBMISSION_STATUS.COMPLETED;
+  const submission = await SubmissionModel.findOneAndUpdate(
+    {
+      _id: submissionId,
+      status: { $ne: SUBMISSION_STATUS.COMPLETED },
+    },
+    {
+      $set: {
+        status: terminalStatus,
+        verdict: result.verdict,
+        passedTestCases: result.passed,
+        totalTestCases: result.total,
+        maxRuntime: result.maxRuntime,
+        totalRuntime: result.totalRuntime,
+        memory: result.memory,
+        failedTestCase: result.failedTestCase,
+        errorMessage: result.errorMessage,
+      },
     },
     {
       new: true,
@@ -46,7 +69,7 @@ async function updateSubmission(submissionId, result, { SubmissionModel = Submis
   );
 
   if (!submission) {
-    throw new Error("Submission not found");
+    return null;
   }
 
   return submission;
@@ -54,5 +77,6 @@ async function updateSubmission(submissionId, result, { SubmissionModel = Submis
 
 module.exports = {
   getQuestionDetails,
+  markSubmissionRunning,
   updateSubmission,
 };

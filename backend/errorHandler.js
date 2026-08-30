@@ -1,13 +1,20 @@
+const AppError = require("./errors/appError");
+
 function notFoundHandler(req, res, next) {
-  const error = new Error("Route not found");
-  error.statusCode = 404;
-  error.code = "NOT_FOUND";
+  const error = new AppError("Route not found", 404, "NOT_FOUND");
   next(error);
 }
 
 function errorHandler(err, req, res, next) {
   if (res.headersSent) {
     return next(err);
+  }
+
+  if (err instanceof AppError) {
+    return res.status(err.statusCode).json({
+      message: err.message,
+      ...(err.details ? { details: err.details } : {}),
+    });
   }
 
   if (err?.code === "NOT_FOUND" || err?.statusCode === 404) {
