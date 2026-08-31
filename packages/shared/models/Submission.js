@@ -97,6 +97,7 @@ const submissionSchema = new mongoose.Schema(
 submissionSchema.index({ userId: 1, createdAt: -1 });
 submissionSchema.index({ userId: 1, questionId: 1 });
 submissionSchema.index({ contestId: 1, userId: 1, contestProblemId: 1, verdict: 1 });
+submissionSchema.index({ contestId: 1, userId: 1, contestProblemId: 1, submittedAtContestMs: 1 });
 submissionSchema.index({ contestId: 1, status: 1 });
 submissionSchema.index({ status: 1, createdAt: 1 });
 

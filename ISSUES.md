@@ -1227,6 +1227,320 @@ No implementation code was modified during this architecture-review phase.
 
 ---
 
+## Phase 6 — Scoring Engine Architecture Review (docs-only, no implementation)
+
+This phase is intentionally limited to architecture review and issue planning. No scoring implementation, Redis leaderboard, Redis Streams, SSE, frontend, or rating code is added.
+
+### Locked product policy decisions (approved)
+
+| # | Policy | Locked rule |
+|---|--------|-------------|
+| 1 | Force-finalize | Strict drain by default. Admin-only `force: true` for emergency finalization. Must create audit log. Queued/running submissions at force time are permanently excluded from standings; may still judge but cannot change score after `FINALIZED`. |
+| 2 | Unregister / disqualification | Unregister allowed only before `RUNNING`. Blocked once `RUNNING`. No retroactive score removal in Phase 6. Disqualification deferred to later phase. |
+| 3 | Standings visibility | `GET /standings` public. `GET /standings/me` requires auth. Respect Phase 5 contest-state visibility rules. |
+| 4 | Points-based scoring | Defer `Contest.scoringMode`. Phase 6 ICPC-only. No speculative points-based fields or logic. |
+
+See `PHASE_6_SCORING_ENGINE.md` §16 (force-finalize), §22 (API/unregister), §26 (locked decisions).
+
+### ISSUE-601 — Scoring contract and ICPC penalty semantics
+
+**Priority:** P0
+
+**Status:** ✅ DONE
+
+**Objective:** Lock the authoritative contest scoring contract: solved definition, penalty formula, tie-breaking, and verdict mapping.
+
+**Scope:**
+- ACM/ICPC-style penalty scoring (not points-based)
+- `Accepted` as sole solving verdict
+- `submittedAtContestMs` as sole timing input
+- Wrong-attempt verdict set and post-solve ignore rules
+
+**Dependencies:** Phase 5 contest engine (ISSUE-505, ISSUE-506)
+
+**Likely files:**
+- `packages/shared/contracts/scoring.js` (new)
+- `PHASE_6_SCORING_ENGINE.md`
+- `KODER_BACKEND_ROADMAP.md`
+
+**Testing requirements:** unit tests for penalty formula, tie-break ordering, verdict classification
+
+**Acceptance criteria:** scoring rules are deterministic, documented, and independently testable without Redis or workers
+
+**Implementation:** `packages/shared/contracts/scoring.js`, `backend/test_scoring_contract.js`
+
+---
+
+### ISSUE-602 — Authoritative scoring state model
+
+**Priority:** P0
+
+**Status:** ✅ DONE
+
+**Objective:** Define and implement MongoDB authoritative scoring projections separate from submission history.
+
+**Scope:**
+- Extend `ContestParticipant` with aggregate fields (`solvedCount`, `totalPenalty`, `lastAcceptedContestMs`)
+- Add `ContestParticipantProblem` per-problem authoritative state
+- Add `ContestScoredSubmission` idempotency ledger
+- Required indexes per `PHASE_6_SCORING_ENGINE.md` §19
+
+**Dependencies:** ISSUE-601
+
+**Likely files:**
+- `packages/shared/models/ContestParticipant.js`
+- `packages/shared/models/ContestParticipantProblem.js` (new)
+- `packages/shared/models/ContestScoredSubmission.js` (new)
+- `packages/shared/index.js`
+
+**Testing requirements:** schema validation, unique index enforcement, model registration in shared package
+
+**Acceptance criteria:** standings can be represented from Mongo aggregates without Redis; per-problem state is not embedded in contest document
+
+**Implementation:** `packages/shared/models/ContestParticipantProblem.js`, `packages/shared/models/ContestScoredSubmission.js`, extended `ContestParticipant`, `backend/test_scoring_models.js`
+
+---
+
+### ISSUE-603 — Judge-result → scoring integration
+
+**Priority:** P0
+
+**Status:** ✅ DONE
+
+**Objective:** Trigger scoring after terminal submission persistence without mixing contest logic into the judge executor.
+
+**Scope:**
+- Hook `scoringService.applySubmissionResult(submissionId)` after successful `updateSubmission` when `contestId` is set
+- Scoring service reads submission + contest metadata; workers remain verdict-only
+- No scoring when `contestId` is null (practice submissions)
+
+**Dependencies:** ISSUE-601, ISSUE-602
+
+**Likely files:**
+- `packages/shared/db/dbCalls.js`
+- `backend/services/scoring.service.js` (new)
+- `backend/repositories/scoring.repository.js` (new)
+- `workers/common/executionEngine.js` (integration point only)
+
+**Testing requirements:** practice submission does not score; contest submission with terminal verdict invokes scoring exactly once per submission ID
+
+**Acceptance criteria:** judge path unchanged semantically; scoring is a separate post-result step in the shared persistence boundary
+
+**Implementation:** `packages/shared/scoring/applySubmissionResult.js`, `packages/shared/db/dbCalls.js` (`triggerContestScoring` hook), `backend/test_scoring_engine.js`
+
+---
+
+### ISSUE-604 — Idempotent scoring processing
+
+**Priority:** P0
+
+**Objective:** Ensure at-least-once worker replay does not double-count solves, penalties, or aggregates.
+
+**Scope:**
+- Ledger insert with unique `{ submissionId }` as first write in scoring handler
+- Duplicate invocations return without mutation
+- Terminal submission guard in `updateSubmission` remains complementary, not sole idempotency layer
+
+**Dependencies:** ISSUE-602, ISSUE-603
+
+**Likely files:**
+- `backend/services/scoring.service.js`
+- `backend/repositories/scoring.repository.js`
+- `packages/shared/models/ContestScoredSubmission.js`
+
+**Testing requirements:** replay same `submissionId` 10× → identical participant state; duplicate key handled gracefully
+
+**Acceptance criteria:** idempotent under worker retry, reconciliation retry, and manual re-invocation
+
+---
+
+### ISSUE-605 — Out-of-order and concurrent scoring
+
+**Priority:** P0
+
+**Objective:** Guarantee deterministic final scores regardless of result arrival or processing order.
+
+**Scope:**
+- Canonical first-AC selection by `(submittedAtContestMs, submissionId)`
+- Wrong-attempt count derived from submission query at solve time, not incremental WA events
+- Conditional solve transition (`solved: false`) on `ContestParticipantProblem`
+- Concurrent WA+AC and AC+AC cases covered
+
+**Dependencies:** ISSUE-603, ISSUE-604
+
+**Likely files:**
+- `backend/services/scoring.service.js`
+- `backend/repositories/submission.repository.js` (scoring queries)
+- `backend/test_scoring_engine.js` (new)
+
+**Testing requirements:** permuted arrival orders (B,A,C and C,A,B) produce identical standings; concurrent solve attempts produce one winner
+
+**Acceptance criteria:** final standings independent of queue latency and event order
+
+---
+
+### ISSUE-606 — Standings rebuild and reconciliation
+
+**Priority:** P1
+
+**Objective:** Rebuild authoritative Mongo standings from `Submission` history for recovery and audit.
+
+**Scope:**
+- `reconcileContestScoring(contestId)` full recompute
+- Drift detection: compare rebuild vs live aggregates
+- Sweep for `completed` contest submissions missing ledger entries
+- Document operational runbook in `PHASE_6_SCORING_ENGINE.md`
+
+**Dependencies:** ISSUE-602, ISSUE-605
+
+**Likely files:**
+- `backend/services/scoring-reconcile.service.js` (new)
+- `backend/repositories/scoring.repository.js`
+- `backend/repositories/submission.repository.js`
+- `PHASE_6_SCORING_ENGINE.md`
+
+**Testing requirements:** inject drift → reconcile restores exact standings; rebuild matches incremental scoring on fixture contests
+
+**Acceptance criteria:** Redis deletion does not prevent standings recovery from Mongo
+
+---
+
+### ISSUE-607 — Contest finalization and snapshot integration
+
+**Priority:** P0
+
+**Objective:** Integrate scoring freeze, pending-submission drain, and final `ContestLeaderboardSnapshot` into finalization.
+
+**Scope:**
+- Block scoring mutations when `Contest.status === FINALIZED`
+- **Strict drain by default:** reject finalize while non-terminal contest submissions exist
+- **Admin-only `force: true`:** emergency finalization with required `reason`; must write audit log (contestId, actorUserId, pendingSubmissionCount, reason, timestamp)
+- **Force-finalize semantics:** queued/running submissions at force time permanently excluded from standings; late terminal results do not mutate standings
+- Write `ContestLeaderboardSnapshot { isFinal: true }` from authoritative aggregates
+- Reconcile immediately before snapshot
+
+**Dependencies:** ISSUE-605, ISSUE-606
+
+**Likely files:**
+- `backend/services/contest.service.js`
+- `backend/services/scoring.service.js`
+- `packages/shared/models/ContestLeaderboardSnapshot.js`
+- `backend/routes/admin.route.js`
+
+**Testing requirements:** finalize is idempotent; snapshot matches aggregates; scoring after finalize is no-op; strict drain blocks finalize; force-finalize writes audit log and excludes pending submissions from standings
+
+**Acceptance criteria:** final standings are durable in Mongo; finalization does not race with scoring; force-finalize behavior matches locked policy
+
+---
+
+### ISSUE-608 — Authoritative Mongo standings API
+
+**Priority:** P1
+
+**Objective:** Expose contest standings from Mongo authoritative aggregates before Phase 7 Redis leaderboard.
+
+**Scope:**
+- `GET /api/v1/contests/:contestId/standings` — **public**, paginated
+- `GET /api/v1/contests/:contestId/standings/me` — **authenticated**
+- Respect contest-state visibility (`RUNNING` / `ENDED` / `FINALIZED` readable; pre-contest states per Phase 5 conventions)
+- Sort per tie-break rules in ISSUE-601
+- No Redis dependency
+
+**Dependencies:** ISSUE-602, ISSUE-605
+
+**Likely files:**
+- `backend/routes/contest.route.js`
+- `backend/services/contest.service.js` or `standings.service.js` (new)
+- `backend/repositories/scoring.repository.js`
+
+**Testing requirements:** sort order matches contract; pagination; public `/standings` without auth; `/standings/me` returns 401 without auth
+
+**Acceptance criteria:** API returns correct standings from Mongo alone; visibility policy matches locked rules; suitable for correctness validation before Redis projection
+
+**Phase 7 dependency:** Redis sub-second live leaderboard remains out of scope
+
+---
+
+### ISSUE-609 — Phase 6 documentation and dependency graph
+
+**Priority:** P1
+
+**Objective:** Maintain Phase 6 architecture docs, roadmap alignment, and implementation sequencing.
+
+**Scope:**
+- `PHASE_6_SCORING_ENGINE.md` (complete)
+- `ISSUES.md` Phase 6 section (this section)
+- `KODER_BACKEND_ROADMAP.md` Phase 6 status update
+
+**Dependencies:** all Phase 6 design issues
+
+**Testing requirements:** dependency ordering review
+
+**Acceptance criteria:** implementation can proceed without Redis/SSE/frontend; Phase 7 issues referenced only as explicit downstream dependencies
+
+---
+
+### Phase 6 Dependency Graph
+
+```text
+ISSUE-601 (Scoring contract)
+    │
+    ▼
+ISSUE-602 (Scoring state model)
+    │
+    ▼
+ISSUE-603 (Judge-result integration)
+    │
+    ├── ISSUE-604 (Idempotency)
+    │
+    └── ISSUE-605 (Out-of-order / concurrent)
+            │
+            ▼
+    ISSUE-606 (Reconciliation / rebuild)
+            │
+            ▼
+    ISSUE-607 (Finalization + snapshot)
+            │
+            ▼
+    ISSUE-608 (Mongo standings API)
+            │
+            ▼
+    [Phase 7: Redis leaderboard projection]
+```
+
+### Phase 6 Implementation Order
+
+1. ISSUE-601 — Scoring contract constants and formula
+2. ISSUE-602 — State models and indexes
+3. ISSUE-603 — Scoring service + judge integration hook
+4. ISSUE-604 — Ledger idempotency
+5. ISSUE-605 — Ordering and concurrency tests
+6. ISSUE-606 — Reconciliation service
+7. ISSUE-607 — Finalization + snapshot
+8. ISSUE-608 — Standings API
+9. ISSUE-609 — Documentation verification
+
+**Important:** Redis leaderboard (Phase 7), SSE (Phase 8), rating, and frontend are explicitly downstream.
+
+---
+
+## Phase 6 Review Status
+
+Phase 5 contest engine implementation is complete (lifecycle, registration, submission validation, queue integration, finalization boundary). Phase 6 designs the authoritative scoring layer that was intentionally deferred:
+
+- MongoDB stores authoritative per-participant and per-problem scoring state
+- `Submission` remains immutable history
+- Scoring is triggered post-judge, not inside the executor
+- Redis is not required for correctness in Phase 6
+
+**All product policy decisions are locked** (force-finalize, unregister, standings visibility, ICPC-only scoring). See `PHASE_6_SCORING_ENGINE.md` §26.
+
+**ISSUE-601, ISSUE-602, and ISSUE-603 are implemented.** ISSUE-604 through ISSUE-608 remain pending.
+
+No worker scoring integration was added in this step.
+
+---
+
 # Implementation Status
 
 ## Completed Phases
@@ -1304,9 +1618,15 @@ Submission processing uses language-specific BullMQ queues and a shared queue ad
 
 ---
 
-### Phase 5 — Product Features & Future Scaling ✅ COMPLETE
+### Phase 5 — Contest Engine ✅ COMPLETE
 
-No unresolved implementation issues remain. Configurable worker concurrency and horizontal scaling are intentionally deferred unless future measured workload justifies their operational complexity and host resource budget.
+Contest lifecycle, registration, problem binding, submission validation, queue integration, and finalization boundary are implemented and tested (`backend/test_contest_engine.js`).
+
+### Phase 6 — Scoring Engine (ISSUE-601/602/603 implemented; ISSUE-604+ pending)
+
+ISSUE-601 (scoring contract), ISSUE-602 (authoritative state models), and ISSUE-603 (judge → scoring integration) are implemented. Remaining Phase 6 work: idempotent scoring processor hardening, reconciliation, finalization snapshot, and Mongo standings API (ISSUE-604–608).
+
+Configurable worker concurrency and horizontal scaling remain intentionally deferred unless future measured workload justifies their operational complexity and host resource budget.
 
 ---
 

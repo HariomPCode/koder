@@ -1,6 +1,18 @@
 const Submission = require("../models/Submission");
 const Question = require("../models/Question");
 const { SUBMISSION_STATUS } = require("../contracts/verdicts");
+const { applySubmissionResult } = require("../scoring/applySubmissionResult");
+
+async function triggerContestScoring(submissionId, submissionDocument = null) {
+  try {
+    await applySubmissionResult(submissionId, { submission: submissionDocument });
+  } catch (error) {
+    console.error(
+      `Contest scoring failed for submission ${submissionId}:`,
+      error?.message || error,
+    );
+  }
+}
 
 async function getQuestionDetails(submissionId, { SubmissionModel = Submission, QuestionModel = Question } = {}) {
   const submission = await SubmissionModel.findById({ _id: submissionId });
@@ -69,7 +81,19 @@ async function updateSubmission(submissionId, result, { SubmissionModel = Submis
   );
 
   if (!submission) {
+    const existingSubmission = await SubmissionModel.findById(submissionId);
+    if (
+      existingSubmission &&
+      existingSubmission.status === SUBMISSION_STATUS.COMPLETED &&
+      existingSubmission.contestId
+    ) {
+      await triggerContestScoring(submissionId, existingSubmission);
+    }
     return null;
+  }
+
+  if (submission.contestId) {
+    await triggerContestScoring(submissionId, submission);
   }
 
   return submission;

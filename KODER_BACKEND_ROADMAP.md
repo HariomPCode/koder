@@ -1,17 +1,101 @@
 # Koder — Master Backend Architecture & Scalability Roadmap
 
-**Status:** Phase 4 worker-infrastructure implementation complete; future contest, leaderboard, SSE, and frontend work remain later phases. Phase 5 is a design-only architecture review and does not implement contest code.
+**Status:** Phases 1–5 implementation complete. Phase 6 scoring foundation (ISSUE-601/602/603) implemented. ISSUE-604+ pending. Redis leaderboard (Phase 7), SSE (Phase 8), and frontend contest features remain later phases.
 **Grounded in:** direct inspection of the `koder-main` repository snapshot (backend, workers, packages/shared, frontend, docker-compose, README.md, ISSUES.md). Every claim about "current behavior" below is cited to a file path. Nothing about a typical online judge is assumed if it isn't in the code.
 **Numbering:** `ISSUES.md` already documents ISSUE-001 through ISSUE-015 (all closed). New issues in this roadmap are numbered **ISSUE-101+** to avoid collision.
 
-## Phase 5 — Contest Engine Architecture Review (docs-only)
+## Phase 5 — Contest Engine ✅ COMPLETE
 
-This repository already contains the contest data model foundation required by the roadmap:
-- `Contest`, `ContestParticipant`, and `ContestLeaderboardSnapshot` are present in `packages/shared/models/`.
-- `Submission` includes contest-scoped fields (`contestId`, `contestProblemId`, `submittedAtContestMs`).
-- `User` includes the contest-facing fields required by the foundation (`rating`, `contestsParticipated`, `highestRating`).
+Implemented and verified:
+- Contest lifecycle (`DRAFT` → `FINALIZED`) with server-time sync
+- Participant registration (unique per contest)
+- Contest problem binding and immutability after start
+- Contest submission validation (`RUNNING`, registered, valid `contestProblemId`)
+- Server-derived `submittedAtContestMs` at intake
+- Queue integration via existing BullMQ adapter
+- Finalization boundary (`ENDED` → `FINALIZED`, idempotent)
 
-This phase remains intentionally review-only. It is not a code-implementation phase. The authoritative contest domain remains MongoDB-based; Redis remains a live projection for leaderboard and related contest events rather than the source of truth. No implementation code should be added for leaderboard, Redis Streams, SSE, or frontend contest features.
+See `backend/services/contest.service.js`, `backend/test_contest_engine.js`, and `PHASE_5_CONTEST_ENGINE.md`.
+
+Scoring was intentionally deferred to Phase 6.
+
+---
+
+## Phase 6 — Scoring Engine (ISSUE-601/602/603 implemented)
+
+**Authoritative document:** `PHASE_6_SCORING_ENGINE.md`
+
+### Implemented (ISSUE-601 / ISSUE-602 / ISSUE-603)
+
+- `packages/shared/contracts/scoring.js` — ICPC penalty helpers, verdict classification, canonical ordering, tie-break/rank utilities
+- `ContestParticipantProblem`, `ContestScoredSubmission` models + extended `ContestParticipant` aggregates
+- Scoring-related indexes on `Submission`, `ContestParticipant`, and new collections
+- `packages/shared/scoring/applySubmissionResult.js` — contest scoring processor
+- `packages/shared/db/dbCalls.js` — post-`updateSubmission` scoring hook for workers
+- Tests: `backend/test_scoring_contract.js`, `backend/test_scoring_models.js`, `backend/test_scoring_engine.js`
+
+### Still pending (ISSUE-604+)
+
+- Idempotent scoring processor hardening (ledger-first policy), reconciliation, finalization snapshot writes, standings API
+
+### Decision locked in Phase 6 review
+
+| Topic | Decision |
+|-------|----------|
+| Scoring model | **ACM/ICPC-style penalty** (not points-based) |
+| Solved definition | Terminal verdict `Accepted` only |
+| Timing | `submittedAtContestMs` at submission intake (not worker time) |
+| Post-solve submissions | Ignored for scoring |
+| Authoritative state | `ContestParticipantProblem` + `ContestParticipant` aggregates + `ContestScoredSubmission` ledger |
+| Idempotency | Unique ledger per `submissionId` + conditional solve updates |
+| Transactions | Not required for steady-state scoring |
+| Trigger | Post-`updateSubmission` scoring service call when `contestId` set |
+| Finalization | Strict drain → reconcile → snapshot → freeze; admin `force: true` with audit log |
+| Force-finalize pending subs | Permanently excluded from standings; may still judge; no post-finalize score change |
+| Unregister | Allowed only before `RUNNING`; no disqualification in Phase 6 |
+| Standings API | `GET /standings` public; `GET /standings/me` authenticated |
+| Points-based future | Defer `scoringMode`; ICPC-only in Phase 6; no speculative fields |
+| Redis | Phase 7 projection only — not required for Phase 6 correctness |
+
+### Current gap (ISSUE-604+)
+
+- `finalizeContest()` does not write snapshot or enforce drain policy
+- `submissionEventPublisher` remains unwired
+- Standings API not implemented
+- Reconciliation service not implemented
+
+### Phase 6 issues
+
+ISSUE-601 through ISSUE-609 in `ISSUES.md`.
+
+### Architecture boundary
+
+```text
+Judge → Submission result → Scoring Engine → MongoDB (authoritative)
+                                              → [Phase 7 Redis]
+                                              → [Phase 8 SSE]
+```
+
+No implementation code for Redis leaderboard, SSE, rating, or frontend in Phase 6. Worker scoring integration is complete at ISSUE-603.
+
+---
+
+## Phase 6 implementation status (ISSUE-601 / ISSUE-602 / ISSUE-603)
+
+| Deliverable | Location |
+|-------------|----------|
+| Scoring contract | `packages/shared/contracts/scoring.js` |
+| Per-problem state | `packages/shared/models/ContestParticipantProblem.js` |
+| Idempotency ledger | `packages/shared/models/ContestScoredSubmission.js` |
+| Participant aggregates | `packages/shared/models/ContestParticipant.js` (`solvedCount`, `totalPenalty`, `lastAcceptedContestMs`) |
+| Submission timing index | `packages/shared/models/Submission.js` — `{ contestId, userId, contestProblemId, submittedAtContestMs }` |
+| Scoring processor | `packages/shared/scoring/applySubmissionResult.js` |
+| Worker integration hook | `packages/shared/db/dbCalls.js` (`triggerContestScoring` after terminal `updateSubmission`) |
+| Contract tests | `backend/test_scoring_contract.js` |
+| Model tests | `backend/test_scoring_models.js` |
+| Integration tests | `backend/test_scoring_engine.js` |
+
+ISSUE-603 (judge → scoring integration) is implemented and verified.
 
 ---
 
@@ -528,7 +612,7 @@ Transitions are driven by a scheduled backend process (ISSUE-125, P0) comparing 
 
 ### Scoring
 
-ICPC-style (solved count primary, penalty time tiebreak) — see the exact Redis score formula in 5.4. **UNKNOWN — REQUIRES DECISION:** whether Koder wants ICPC-style or points-based (LeetCode-contest-style, where `Contest.problems[].points` already exists in the schema specifically to support this alternative) scoring. The schema in 5.2 supports either — `points` per problem is already modeled — but the Redis score formula in 5.4 as written implements ICPC-style penalty scoring. If points-based scoring is wanted instead, the formula becomes `score = Σ(points of solved problems) * 10^7 − penaltySeconds`, a one-line change to the scoring consumer, not a schema or architecture change. This decision should be made before Phase 5 implementation begins (ISSUE-119).
+ICPC-style (solved count primary, penalty time tiebreak) — **decided in Phase 6 review** (`PHASE_6_SCORING_ENGINE.md`). MongoDB authoritative scoring uses ACM/ICPC penalty semantics; `Contest.problems[].points` is retained but not used for Phase 6 ranking. Phase 7 Redis ZSET composite score formula remains derived from the same solved-count + penalty sort key.
 
 ## 13. Redis Architecture (consolidated reference)
 
@@ -1313,9 +1397,9 @@ This matches the brief's instruction: the 10k-user contest infrastructure work i
 ```
 
 Decisions that must be made **before** their dependent step above, tracked as standalone issues but not itself "implementation":
-- Scoring model (ICPC vs. points) — before step 16 (ISSUE-119)
+- Scoring model — **resolved (ICPC penalty)** in Phase 6 review; implement via ISSUE-601–608 before Phase 7 Redis
 - Rating algorithm — before ISSUE-118, not on the critical path above
-- Contest leaderboard visibility (public vs. authenticated) — before step 17 (ISSUE-120)
+- Contest leaderboard visibility — **resolved** in Phase 6 review (`GET /standings` public, `GET /standings/me` authenticated); implement via ISSUE-608
 - Submission cancellation — before or deferred past step 19, per ISSUE-123's P3 status
 - Leaderboard pre-seeding — before step 14 (ISSUE-117)
 - Load testing tool — before step 25 (ISSUE-134)

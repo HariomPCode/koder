@@ -68,6 +68,10 @@ async function runTests() {
             assert.strictEqual(update.$set.status, "completed");
             return null;
           },
+          findById: async () => ({
+            status: "completed",
+            contestId: null,
+          }),
         },
       },
     );
