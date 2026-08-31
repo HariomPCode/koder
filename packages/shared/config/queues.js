@@ -106,7 +106,8 @@ function getWorkerConcurrencyConfig(language) {
 }
 
 function buildQueueJobId(language, submissionId) {
-  return `${String(language || "").toLowerCase()}:${String(submissionId)}`;
+  const normalizedLanguage = String(language || "").trim().toLowerCase();
+  return `${normalizedLanguage}-${String(submissionId)}`;
 }
 
 function createQueueJobOptions(overrides = {}) {

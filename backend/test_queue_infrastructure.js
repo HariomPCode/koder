@@ -1,4 +1,6 @@
 const assert = require("assert");
+const IoRedis = require("ioredis");
+const { Queue } = require("bullmq");
 const {
   QUEUE_NAMES,
   JOB_NAMES,
@@ -9,13 +11,13 @@ const {
 } = require("../packages/shared/config/queues");
 const { SUBMISSION_STATUS } = require("../packages/shared/contracts/verdicts");
 
-function runTests() {
+async function runTests() {
   const passed = [];
   const failed = [];
 
-  function testCase(name, fn) {
+  async function testCase(name, fn) {
     try {
-      fn();
+      await fn();
       passed.push(name);
       console.log(`  ✓ ${name}`);
     } catch (error) {
@@ -25,7 +27,7 @@ function runTests() {
     }
   }
 
-  testCase("Queue names remain language-specific and stable", () => {
+  await testCase("Queue names remain language-specific and stable", () => {
     assert.deepStrictEqual(QUEUE_NAMES, {
       javascript: "js-queue",
       java: "java-queue",
@@ -36,13 +38,51 @@ function runTests() {
     assert.strictEqual(QUEUE_NAMES.python, "python-queue");
   });
 
-  testCase("Deterministic job IDs are language-scoped and stable", () => {
-    assert.strictEqual(buildQueueJobId("javascript", "64e2d5ec5956e8d99d0f1234"), "javascript:64e2d5ec5956e8d99d0f1234");
-    assert.strictEqual(buildQueueJobId("java", "64e2d5ec5956e8d99d0f1234"), "java:64e2d5ec5956e8d99d0f1234");
-    assert.strictEqual(buildQueueJobId("python", "64e2d5ec5956e8d99d0f1234"), "python:64e2d5ec5956e8d99d0f1234");
+  await testCase("Deterministic job IDs are language-scoped, stable, and BullMQ compatible", () => {
+    const submissionId = "64e2d5ec5956e8d99d0f1234";
+    const jsId = buildQueueJobId("javascript", submissionId);
+    const javaId = buildQueueJobId("java", submissionId);
+    const pythonId = buildQueueJobId("python", submissionId);
+
+    assert.strictEqual(jsId, "javascript-64e2d5ec5956e8d99d0f1234");
+    assert.strictEqual(javaId, "java-64e2d5ec5956e8d99d0f1234");
+    assert.strictEqual(pythonId, "python-64e2d5ec5956e8d99d0f1234");
+
+    assert.ok(!jsId.includes(":"));
+    assert.ok(!javaId.includes(":"));
+    assert.ok(!pythonId.includes(":"));
+    assert.strictEqual(buildQueueJobId("javascript", submissionId), jsId);
+    assert.notStrictEqual(jsId, javaId);
+    assert.notStrictEqual(jsId, pythonId);
+    assert.notStrictEqual(javaId, pythonId);
   });
 
-  testCase("Queue job defaults include retry and bounded retention settings", () => {
+  await testCase("BullMQ accepts the generated job IDs", async () => {
+    const connection = new IoRedis({
+      host: process.env.REDIS_HOST || "localhost",
+      port: Number(process.env.REDIS_PORT) || 6379,
+      maxRetriesPerRequest: null,
+    });
+    const queue = new Queue("js-queue", {
+      connection,
+      defaultJobOptions: createQueueJobOptions(),
+    });
+
+    try {
+      const submissionId = "64e2d5ec5956e8d99d0f1234";
+      const jobId = buildQueueJobId("javascript", submissionId);
+      await queue.add("execute", { submissionId }, { jobId });
+      const found = await queue.getJob(jobId);
+      assert.ok(found, "BullMQ should accept and persist the generated job ID");
+      assert.ok(!jobId.includes(":"));
+      await found.remove();
+    } finally {
+      await queue.close();
+      await connection.quit();
+    }
+  });
+
+  await testCase("Queue job defaults include retry and bounded retention settings", () => {
     const options = createQueueJobOptions();
     assert.strictEqual(options.attempts, QUEUE_RETRY_DEFAULTS.attempts);
     assert.strictEqual(options.backoff.type, QUEUE_RETRY_DEFAULTS.backoff.type);
@@ -58,7 +98,7 @@ function runTests() {
     assert.strictEqual(JOB_NAMES.EXECUTE, "execute");
   });
 
-  testCase("Submission lifecycle contract includes created and queued states", () => {
+  await testCase("Submission lifecycle contract includes created and queued states", () => {
     assert.strictEqual(SUBMISSION_STATUS.CREATED, "created");
     assert.strictEqual(SUBMISSION_STATUS.QUEUED, "queued");
     assert.strictEqual(SUBMISSION_STATUS.RUNNING, "running");
@@ -78,4 +118,7 @@ function runTests() {
   console.log(`\n${passed.length} passed, 0 failed`);
 }
 
-runTests();
+runTests().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
