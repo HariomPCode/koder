@@ -637,6 +637,10 @@ async function runTests() {
       await applySubmissionResult(ac._id);
       await applySubmissionResult(ac._id);
 
+      for (let attempt = 0; attempt < 7; attempt += 1) {
+        await applySubmissionResult(ac._id);
+      }
+
       const ledgerCount = await ContestScoredSubmission.countDocuments({ submissionId: ac._id });
       assert.strictEqual(ledgerCount, 1);
 
@@ -688,6 +692,10 @@ async function runTests() {
 
       await applySubmissionResult(wa._id);
       await applySubmissionResult(wa._id);
+
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        await applySubmissionResult(wa._id);
+      }
 
       const ledgerCount = await ContestScoredSubmission.countDocuments({ submissionId: wa._id });
       assert.strictEqual(ledgerCount, 1);
@@ -1176,6 +1184,202 @@ async function runTests() {
       const afterManualRetry = await getParticipantState(contest._id, user._id);
       assert.strictEqual(afterManualRetry.solvedCount, 1);
       assert.strictEqual(afterManualRetry.totalPenalty, 11);
+    });
+
+    await testCase("ISSUE-604: partial aggregate failure heals on retry without double-counting", async () => {
+      const contest = await Contest.create({
+        title: "Partial Failure Contest",
+        slug: "partial-failure-contest",
+        description: "Partial aggregate failure healing",
+        registrationOpenTime: new Date(Date.now() - 3 * 60 * 60 * 1000),
+        startTime: new Date(Date.now() - 2 * 60 * 60 * 1000),
+        endTime: new Date(Date.now() + 2 * 60 * 60 * 1000),
+        status: "RUNNING",
+        createdBy: fixture.adminUser._id,
+        problems: [
+          {
+            questionId: fixture.questionA._id,
+            order: 1,
+            points: 100,
+            penaltyMinutes: PENALTY_MINUTES,
+          },
+        ],
+      });
+      const problemId = contest.problems[0]._id;
+      const user = await User.create({
+        firstName: "Partial",
+        lastName: "Failure",
+        email: "partialfailure@example.com",
+        password: "hashed-password",
+      });
+      await ContestParticipant.create({
+        contestId: contest._id,
+        userId: user._id,
+        registeredAt: new Date(),
+      });
+
+      const ac = await createCompletedSubmission({
+        userId: user._id,
+        questionId: fixture.questionA._id,
+        contestId: contest._id,
+        contestProblemId: problemId,
+        submittedAtContestMs: minutes(14),
+        verdict: JUDGE_VERDICTS.ACCEPTED,
+      });
+
+      await ContestParticipantProblem.create({
+        contestId: contest._id,
+        userId: user._id,
+        contestProblemId: problemId,
+        solved: true,
+        firstAcceptedSubmissionId: ac._id,
+        firstAcceptedAtContestMs: minutes(14),
+        problemPenalty: 14,
+      });
+      await ContestParticipant.updateOne(
+        { contestId: contest._id, userId: user._id },
+        { $set: { solvedCount: 0, totalPenalty: 0, lastAcceptedContestMs: null } },
+      );
+
+      const healed = await applySubmissionResult(ac._id);
+      assert.strictEqual(healed.processed, true);
+      assert.ok(
+        healed.effect === SCORING_EFFECT.SOLVE || healed.effect === SCORING_EFFECT.NONE,
+        `expected solve or none effect, got ${healed.effect}`,
+      );
+
+      const participant = await getParticipantState(contest._id, user._id);
+      assert.strictEqual(participant.solvedCount, 1);
+      assert.strictEqual(participant.totalPenalty, 14);
+      assert.strictEqual(participant.lastAcceptedContestMs, minutes(14));
+      assert.strictEqual(await ContestScoredSubmission.countDocuments({ submissionId: ac._id }), 1);
+    });
+
+    await testCase("ISSUE-604: existing ledger with corrupted aggregate is repaired on reprocess", async () => {
+      const contest = await Contest.create({
+        title: "Corrupt Aggregate Contest",
+        slug: "corrupt-aggregate-contest",
+        description: "Ledger exists aggregate corrupted",
+        registrationOpenTime: new Date(Date.now() - 3 * 60 * 60 * 1000),
+        startTime: new Date(Date.now() - 2 * 60 * 60 * 1000),
+        endTime: new Date(Date.now() + 2 * 60 * 60 * 1000),
+        status: "RUNNING",
+        createdBy: fixture.adminUser._id,
+        problems: [
+          {
+            questionId: fixture.questionA._id,
+            order: 1,
+            points: 100,
+            penaltyMinutes: PENALTY_MINUTES,
+          },
+        ],
+      });
+      const problemId = contest.problems[0]._id;
+      const user = await User.create({
+        firstName: "Corrupt",
+        lastName: "Aggregate",
+        email: "corruptaggregate@example.com",
+        password: "hashed-password",
+      });
+      await ContestParticipant.create({
+        contestId: contest._id,
+        userId: user._id,
+        registeredAt: new Date(),
+      });
+
+      const ac = await createCompletedSubmission({
+        userId: user._id,
+        questionId: fixture.questionA._id,
+        contestId: contest._id,
+        contestProblemId: problemId,
+        submittedAtContestMs: minutes(16),
+        verdict: JUDGE_VERDICTS.ACCEPTED,
+      });
+
+      await ContestParticipantProblem.create({
+        contestId: contest._id,
+        userId: user._id,
+        contestProblemId: problemId,
+        solved: true,
+        firstAcceptedSubmissionId: ac._id,
+        firstAcceptedAtContestMs: minutes(16),
+        problemPenalty: 16,
+      });
+      await ContestParticipant.updateOne(
+        { contestId: contest._id, userId: user._id },
+        { $set: { solvedCount: 99, totalPenalty: 999, lastAcceptedContestMs: minutes(1) } },
+      );
+      await ContestScoredSubmission.create({
+        submissionId: ac._id,
+        contestId: contest._id,
+        userId: user._id,
+        contestProblemId: problemId,
+        verdict: JUDGE_VERDICTS.ACCEPTED,
+        submittedAtContestMs: minutes(16),
+        effect: SCORING_EFFECT.SOLVE,
+      });
+
+      const repaired = await applySubmissionResult(ac._id);
+      assert.strictEqual(repaired.processed, true);
+      assert.strictEqual(repaired.ledgerCreated, false);
+
+      const participant = await getParticipantState(contest._id, user._id);
+      assert.strictEqual(participant.solvedCount, 1);
+      assert.strictEqual(participant.totalPenalty, 16);
+      assert.strictEqual(participant.lastAcceptedContestMs, minutes(16));
+      assert.strictEqual(await ContestScoredSubmission.countDocuments({ submissionId: ac._id }), 1);
+    });
+
+    await testCase("ISSUE-604: concurrent duplicate Accepted processing does not double-count", async () => {
+      const contest = await Contest.create({
+        title: "Concurrent Duplicate Contest",
+        slug: "concurrent-duplicate-contest",
+        description: "Concurrent duplicate replay",
+        registrationOpenTime: new Date(Date.now() - 3 * 60 * 60 * 1000),
+        startTime: new Date(Date.now() - 2 * 60 * 60 * 1000),
+        endTime: new Date(Date.now() + 2 * 60 * 60 * 1000),
+        status: "RUNNING",
+        createdBy: fixture.adminUser._id,
+        problems: [
+          {
+            questionId: fixture.questionA._id,
+            order: 1,
+            points: 100,
+            penaltyMinutes: PENALTY_MINUTES,
+          },
+        ],
+      });
+      const problemId = contest.problems[0]._id;
+      const user = await User.create({
+        firstName: "Concurrent",
+        lastName: "Duplicate",
+        email: "concurrentduplicate@example.com",
+        password: "hashed-password",
+      });
+      await ContestParticipant.create({
+        contestId: contest._id,
+        userId: user._id,
+        registeredAt: new Date(),
+      });
+
+      const ac = await createCompletedSubmission({
+        userId: user._id,
+        questionId: fixture.questionA._id,
+        contestId: contest._id,
+        contestProblemId: problemId,
+        submittedAtContestMs: minutes(9),
+        verdict: JUDGE_VERDICTS.ACCEPTED,
+      });
+
+      await Promise.all(
+        Array.from({ length: 10 }, () => applySubmissionResult(ac._id)),
+      );
+
+      const participant = await getParticipantState(contest._id, user._id);
+      assert.strictEqual(participant.solvedCount, 1);
+      assert.strictEqual(participant.totalPenalty, 9);
+      assert.strictEqual(participant.lastAcceptedContestMs, minutes(9));
+      assert.strictEqual(await ContestScoredSubmission.countDocuments({ submissionId: ac._id }), 1);
     });
 
     await testCase("WORKER → SCORING PATH: updateSubmission triggers contest scoring hook", async () => {

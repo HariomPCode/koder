@@ -1334,23 +1334,27 @@ See `PHASE_6_SCORING_ENGINE.md` §16 (force-finalize), §22 (API/unregister), §
 
 **Priority:** P0
 
-**Objective:** Ensure at-least-once worker replay does not double-count solves, penalties, or aggregates.
+**Status:** ✅ DONE
+
+**Objective:** Ensure at-least-once worker replay does not double-count solves, penalties, or aggregates, and that partial aggregate failures self-heal on retry.
 
 **Scope:**
-- Ledger insert with unique `{ submissionId }` as first write in scoring handler
-- Duplicate invocations return without mutation
+- State-first scoring with `reconcileParticipantAggregate()` derived from authoritative `ContestParticipantProblem` rows
+- Unique `{ submissionId }` ledger remains the per-submission audit/idempotency record
+- Duplicate ledger means the submission event was seen before; scoring state must still be reconciled before returning
 - Terminal submission guard in `updateSubmission` remains complementary, not sole idempotency layer
 
 **Dependencies:** ISSUE-602, ISSUE-603
 
 **Likely files:**
-- `backend/services/scoring.service.js`
-- `backend/repositories/scoring.repository.js`
-- `packages/shared/models/ContestScoredSubmission.js`
+- `packages/shared/scoring/applySubmissionResult.js`
+- `backend/test_scoring_engine.js`
 
-**Testing requirements:** replay same `submissionId` 10× → identical participant state; duplicate key handled gracefully
+**Testing requirements:** replay same `submissionId` 10× → identical participant state; partial aggregate failure heals on retry; duplicate key handled gracefully
 
-**Acceptance criteria:** idempotent under worker retry, reconciliation retry, and manual re-invocation
+**Acceptance criteria:** idempotent under worker retry, reconciliation retry, and manual re-invocation; stale aggregates reconstruct from per-problem state on reprocess
+
+**Implementation:** `reconcileParticipantAggregate()` in `packages/shared/scoring/applySubmissionResult.js`, extended `backend/test_scoring_engine.js`
 
 ---
 
@@ -1535,7 +1539,7 @@ Phase 5 contest engine implementation is complete (lifecycle, registration, subm
 
 **All product policy decisions are locked** (force-finalize, unregister, standings visibility, ICPC-only scoring). See `PHASE_6_SCORING_ENGINE.md` §26.
 
-**ISSUE-601, ISSUE-602, and ISSUE-603 are implemented.** ISSUE-604 through ISSUE-608 remain pending.
+**ISSUE-601, ISSUE-602, ISSUE-603, and ISSUE-604 are implemented.** ISSUE-605 through ISSUE-608 remain pending.
 
 No worker scoring integration was added in this step.
 
@@ -1622,9 +1626,9 @@ Submission processing uses language-specific BullMQ queues and a shared queue ad
 
 Contest lifecycle, registration, problem binding, submission validation, queue integration, and finalization boundary are implemented and tested (`backend/test_contest_engine.js`).
 
-### Phase 6 — Scoring Engine (ISSUE-601/602/603 implemented; ISSUE-604+ pending)
+### Phase 6 — Scoring Engine (ISSUE-601/602/603/604 implemented; ISSUE-605+ pending)
 
-ISSUE-601 (scoring contract), ISSUE-602 (authoritative state models), and ISSUE-603 (judge → scoring integration) are implemented. Remaining Phase 6 work: idempotent scoring processor hardening, reconciliation, finalization snapshot, and Mongo standings API (ISSUE-604–608).
+ISSUE-601 (scoring contract), ISSUE-602 (authoritative state models), ISSUE-603 (judge → scoring integration), and ISSUE-604 (idempotent processing + aggregate reconciliation) are implemented. Remaining Phase 6 work: out-of-order hardening tests, reconciliation service, finalization snapshot, and Mongo standings API (ISSUE-605–608).
 
 Configurable worker concurrency and horizontal scaling remain intentionally deferred unless future measured workload justifies their operational complexity and host resource budget.
 

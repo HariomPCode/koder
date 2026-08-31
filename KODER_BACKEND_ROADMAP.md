@@ -1,6 +1,6 @@
 # Koder — Master Backend Architecture & Scalability Roadmap
 
-**Status:** Phases 1–5 implementation complete. Phase 6 scoring foundation (ISSUE-601/602/603) implemented. ISSUE-604+ pending. Redis leaderboard (Phase 7), SSE (Phase 8), and frontend contest features remain later phases.
+**Status:** Phases 1–5 implementation complete. Phase 6 scoring foundation (ISSUE-601/602/603/604) implemented. ISSUE-605+ pending. Redis leaderboard (Phase 7), SSE (Phase 8), and frontend contest features remain later phases.
 **Grounded in:** direct inspection of the `koder-main` repository snapshot (backend, workers, packages/shared, frontend, docker-compose, README.md, ISSUES.md). Every claim about "current behavior" below is cited to a file path. Nothing about a typical online judge is assumed if it isn't in the code.
 **Numbering:** `ISSUES.md` already documents ISSUE-001 through ISSUE-015 (all closed). New issues in this roadmap are numbered **ISSUE-101+** to avoid collision.
 
@@ -21,22 +21,22 @@ Scoring was intentionally deferred to Phase 6.
 
 ---
 
-## Phase 6 — Scoring Engine (ISSUE-601/602/603 implemented)
+## Phase 6 — Scoring Engine (ISSUE-601/602/603/604 implemented)
 
 **Authoritative document:** `PHASE_6_SCORING_ENGINE.md`
 
-### Implemented (ISSUE-601 / ISSUE-602 / ISSUE-603)
+### Implemented (ISSUE-601 / ISSUE-602 / ISSUE-603 / ISSUE-604)
 
 - `packages/shared/contracts/scoring.js` — ICPC penalty helpers, verdict classification, canonical ordering, tie-break/rank utilities
 - `ContestParticipantProblem`, `ContestScoredSubmission` models + extended `ContestParticipant` aggregates
 - Scoring-related indexes on `Submission`, `ContestParticipant`, and new collections
-- `packages/shared/scoring/applySubmissionResult.js` — contest scoring processor
+- `packages/shared/scoring/applySubmissionResult.js` — contest scoring processor with `reconcileParticipantAggregate()`
 - `packages/shared/db/dbCalls.js` — post-`updateSubmission` scoring hook for workers
 - Tests: `backend/test_scoring_contract.js`, `backend/test_scoring_models.js`, `backend/test_scoring_engine.js`
 
-### Still pending (ISSUE-604+)
+### Still pending (ISSUE-605+)
 
-- Idempotent scoring processor hardening (ledger-first policy), reconciliation, finalization snapshot writes, standings API
+- Out-of-order hardening tests, reconciliation service, finalization snapshot writes, standings API
 
 ### Decision locked in Phase 6 review
 
@@ -57,12 +57,12 @@ Scoring was intentionally deferred to Phase 6.
 | Points-based future | Defer `scoringMode`; ICPC-only in Phase 6; no speculative fields |
 | Redis | Phase 7 projection only — not required for Phase 6 correctness |
 
-### Current gap (ISSUE-604+)
+### Current gap (ISSUE-605+)
 
 - `finalizeContest()` does not write snapshot or enforce drain policy
 - `submissionEventPublisher` remains unwired
 - Standings API not implemented
-- Reconciliation service not implemented
+- Full contest reconciliation service not implemented
 
 ### Phase 6 issues
 
@@ -80,7 +80,7 @@ No implementation code for Redis leaderboard, SSE, rating, or frontend in Phase 
 
 ---
 
-## Phase 6 implementation status (ISSUE-601 / ISSUE-602 / ISSUE-603)
+## Phase 6 implementation status (ISSUE-601 / ISSUE-602 / ISSUE-603 / ISSUE-604)
 
 | Deliverable | Location |
 |-------------|----------|
@@ -90,12 +90,13 @@ No implementation code for Redis leaderboard, SSE, rating, or frontend in Phase 
 | Participant aggregates | `packages/shared/models/ContestParticipant.js` (`solvedCount`, `totalPenalty`, `lastAcceptedContestMs`) |
 | Submission timing index | `packages/shared/models/Submission.js` — `{ contestId, userId, contestProblemId, submittedAtContestMs }` |
 | Scoring processor | `packages/shared/scoring/applySubmissionResult.js` |
+| Aggregate reconciliation | `reconcileParticipantAggregate()` in `packages/shared/scoring/applySubmissionResult.js` |
 | Worker integration hook | `packages/shared/db/dbCalls.js` (`triggerContestScoring` after terminal `updateSubmission`) |
 | Contract tests | `backend/test_scoring_contract.js` |
 | Model tests | `backend/test_scoring_models.js` |
 | Integration tests | `backend/test_scoring_engine.js` |
 
-ISSUE-603 (judge → scoring integration) is implemented and verified.
+ISSUE-604 (idempotent processing + partial-failure healing) is implemented and verified.
 
 ---
 

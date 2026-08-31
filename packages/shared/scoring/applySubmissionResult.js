@@ -78,32 +78,40 @@ function getContestProblem(contest, contestProblemId) {
   );
 }
 
-async function recomputeParticipantLastAccepted({ contestId, userId }) {
+async function reconcileParticipantAggregate({ contestId, userId }) {
   const solvedProblems = await ContestParticipantProblem.find({
     contestId,
     userId,
     solved: true,
   })
-    .select("firstAcceptedAtContestMs")
+    .select("problemPenalty firstAcceptedAtContestMs")
     .lean();
 
-  if (solvedProblems.length === 0) {
-    await ContestParticipant.updateOne(
-      { contestId, userId },
-      { $set: { lastAcceptedContestMs: null } },
-    );
-    return;
-  }
-
-  const lastAcceptedContestMs = solvedProblems.reduce((max, problem) => {
-    const value = problem.firstAcceptedAtContestMs ?? 0;
-    return value > max ? value : max;
-  }, 0);
+  const solvedCount = solvedProblems.length;
+  const totalPenalty = solvedProblems.reduce(
+    (sum, problem) => sum + (problem.problemPenalty || 0),
+    0,
+  );
+  const lastAcceptedContestMs =
+    solvedProblems.length === 0
+      ? null
+      : solvedProblems.reduce((max, problem) => {
+          const value = problem.firstAcceptedAtContestMs ?? 0;
+          return value > max ? value : max;
+        }, 0);
 
   await ContestParticipant.updateOne(
     { contestId, userId },
-    { $set: { lastAcceptedContestMs } },
+    {
+      $set: {
+        solvedCount,
+        totalPenalty,
+        lastAcceptedContestMs,
+      },
+    },
   );
+
+  return { solvedCount, totalPenalty, lastAcceptedContestMs };
 }
 
 async function ensureProblemSolvedFromCanonical({
@@ -140,8 +148,6 @@ async function ensureProblemSolvedFromCanonical({
   }
 
   if (prior && prior.solved) {
-    const penaltyDelta = problemPenalty - (prior.problemPenalty || 0);
-
     await ContestParticipantProblem.updateOne(
       { contestId, userId, contestProblemId },
       {
@@ -153,12 +159,6 @@ async function ensureProblemSolvedFromCanonical({
         },
       },
     );
-
-    if (penaltyDelta !== 0) {
-      await ContestParticipant.updateOne({ contestId, userId }, { $inc: { totalPenalty: penaltyDelta } });
-    }
-
-    await recomputeParticipantLastAccepted({ contestId, userId });
 
     return { newlySolved: false, corrected: true, alreadyCorrect: false };
   }
@@ -231,16 +231,6 @@ async function ensureProblemSolvedFromCanonical({
 
   const wasUnsolved = !(prior && prior.solved);
   if (wasUnsolved) {
-    await ContestParticipant.updateOne(
-      { contestId, userId },
-      {
-        $inc: {
-          solvedCount: 1,
-          totalPenalty: problemPenalty,
-        },
-      },
-    );
-    await recomputeParticipantLastAccepted({ contestId, userId });
     return { newlySolved: true, corrected: false, alreadyCorrect: false };
   }
 
@@ -352,6 +342,11 @@ async function applySubmissionResult(submissionId, options = {}) {
     });
   }
 
+  await reconcileParticipantAggregate({
+    contestId: submission.contestId,
+    userId: submission.userId,
+  });
+
   const effect = resolveLedgerEffect({
     submission,
     canonical,
@@ -382,5 +377,6 @@ async function applySubmissionResult(submissionId, options = {}) {
 module.exports = {
   CONTEST_SCORING_ELIGIBLE_STATUSES,
   applySubmissionResult,
+  reconcileParticipantAggregate,
   isDuplicateKeyError,
 };

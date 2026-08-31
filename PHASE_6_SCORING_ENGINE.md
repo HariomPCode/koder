@@ -306,7 +306,7 @@ Worker architecture is at-least-once. The same terminal submission result may be
 ```
 
 - Insert with unique `{ submissionId: 1 }` as the idempotency gate.
-- Duplicate insert → scoring handler returns immediately (already processed).
+- Duplicate insert means the submission event was seen before; scoring state must still be reconciled before returning.
 
 **Layer 2 — conditional updates on `ContestParticipantProblem`**
 
@@ -888,7 +888,7 @@ Authoritative standings API (Mongo)
 2. **State models** — `ContestParticipantProblem`, `ContestScoredSubmission`, extend `ContestParticipant`.
 3. **Indexes** — create alongside models.
 4. **Scoring service** — pure `applySubmissionResult`, unit-testable.
-5. **Idempotency** — ledger-first write path.
+5. **Idempotency** — state-first apply with aggregate reconciliation; ledger records per-submission processing.
 6. **Judge integration** — hook after `updateSubmission` success in shared path.
 7. **Out-of-order tests** — WA/AC permutations, duplicate replay.
 8. **Reconciliation service** — full contest rebuild + drift detection.
@@ -985,4 +985,5 @@ Phase 6 implements ACM/ICPC-style penalty scoring as authoritative MongoDB proje
 - **ISSUE-601 ✅** — shared scoring contract in `packages/shared/contracts/scoring.js`
 - **ISSUE-602 ✅** — `ContestParticipantProblem`, `ContestScoredSubmission`, extended `ContestParticipant`, indexes
 - **ISSUE-603 ✅** — `applySubmissionResult` processor, `updateSubmission` scoring hook, `backend/test_scoring_engine.js`
-- **ISSUE-604+** — pending (reconciliation, finalization snapshot, standings API)
+- **ISSUE-604 ✅** — idempotent processing with `reconcileParticipantAggregate()` and duplicate-ledger reconcile-on-retry
+- **ISSUE-605+** — pending (out-of-order hardening, reconciliation, finalization snapshot, standings API)
