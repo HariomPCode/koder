@@ -979,6 +979,254 @@ This graph makes the capacity-control issue the mandatory prerequisite for any p
 
 ---
 
+### Phase 5 — Contest Engine Architecture Review (docs-only, no implementation)
+
+This phase is intentionally limited to architecture review and issue planning. No contest implementation code, leaderboard code, Redis Streams code, SSE code, or frontend code is added.
+
+#### ISSUE-501 — Contest lifecycle and state transitions
+
+**Priority:** P0
+
+**Objective:** Define the authoritative contest lifecycle and valid transitions without implementing runtime behavior.
+
+**Files likely affected:**
+- `packages/shared/models/Contest.js`
+- `packages/shared/models/Submission.js`
+- `KODER_BACKEND_ROADMAP.md`
+
+**Dependencies:** none; this is the foundation for all contest operations
+
+**Implementation scope:** state machine design only
+
+**Testing requirements:** schema-level validation review and transition rules documented in design docs
+
+**Acceptance criteria:** valid transitions are explicit, invalid transitions are rejected, and server-authoritative time is used for lifecycle gating
+
+---
+
+#### ISSUE-502 — Contest scheduling and authoritative time
+
+**Priority:** P0
+
+**Objective:** Define server-authoritative scheduling model for registration, start, and end windows without trusting client clocks.
+
+**Files likely affected:**
+- `packages/shared/models/Contest.js`
+- `KODER_BACKEND_ROADMAP.md`
+- `PHASE_5_CONTEST_ENGINE.md`
+
+**Dependencies:** ISSUE-501
+
+**Implementation scope:** scheduling semantics and failure-recovery model only
+
+**Testing requirements:** review of transition timing rules, scheduler-recovery behavior, and late-submission policy
+
+**Acceptance criteria:** contest windows are derived from server time and not client time; start/end validity rules are documented
+
+---
+
+#### ISSUE-503 — Contest problem binding and immutability
+
+**Priority:** P0
+
+**Objective:** Define how contest problems are bound to the contest and how problem identity remains stable throughout the contest.
+
+**Files likely affected:**
+- `packages/shared/models/Contest.js`
+- `packages/shared/models/Submission.js`
+- `packages/shared/models/Question.js`
+
+**Dependencies:** ISSUE-501
+
+**Implementation scope:** embedded contest-problem design and immutability rules only
+
+**Testing requirements:** design review of `contestProblemId` stability and question binding validation
+
+**Acceptance criteria:** contest problems are immutable after contest start and remain stable for contest-scoped submissions
+
+---
+
+#### ISSUE-504 — Participant registration lifecycle
+
+**Priority:** P0
+
+**Objective:** Define registration, duplicate-registration handling, eligibility, and registration cutoff semantics per contest.
+
+**Files likely affected:**
+- `packages/shared/models/ContestParticipant.js`
+- `packages/shared/models/Contest.js`
+- `KODER_BACKEND_ROADMAP.md`
+
+**Dependencies:** ISSUE-501, ISSUE-502
+
+**Implementation scope:** registration policy and idempotency model
+
+**Testing requirements:** duplicate-registration safeguards and server-side registration validation review
+
+**Acceptance criteria:** registration is unique per contest and remains explicitly server-authoritative
+
+---
+
+#### ISSUE-505 — Contest submission validation and server-side policy
+
+**Priority:** P0
+
+**Objective:** Define the complete server-side validation contract for contest submissions including contest existence, timing, registration, and problem binding.
+
+**Files likely affected:**
+- `packages/shared/models/Submission.js`
+- `backend/services/submission.service.js`
+- `backend/routes/submission.route.js`
+
+**Dependencies:** ISSUE-501, ISSUE-503, ISSUE-504
+
+**Implementation scope:** validation logic and early rejection rules only
+
+**Testing requirements:** design review against valid/invalid submission scenarios
+
+**Acceptance criteria:** contest submissions can only be created when the contest is running, the user is registered, and the problem belongs to that contest
+
+---
+
+#### ISSUE-506 — Contest submission and queue integration
+
+**Priority:** P0
+
+**Objective:** Define how contest submissions interact with the existing queue and worker architecture without redesigning the queue system.
+
+**Files likely affected:**
+- `backend/queue/queueAdapter.js`
+- `backend/services/submission.service.js`
+- `packages/shared/config/queues.js`
+- `workers/common/workerFactory.js`
+
+**Dependencies:** ISSUE-505
+
+**Implementation scope:** submission flow review and queue integration contract
+
+**Testing requirements:** queue and worker integration review; duplicate-job and stale-worker behavior discussed
+
+**Acceptance criteria:** contest submissions reuse the existing language queue model and the submission lifecycle remains authoritative in MongoDB
+
+---
+
+#### ISSUE-507 — Scoring boundary and leaderboard projection
+
+**Priority:** P0
+
+**Objective:** Define the boundary between judge completion and contest scoring so scoring remains an explicit post-submission step.
+
+**Files likely affected:**
+- `packages/shared/models/Submission.js`
+- `packages/shared/models/ContestLeaderboardSnapshot.js`
+- `KODER_BACKEND_ROADMAP.md`
+
+**Dependencies:** ISSUE-505, ISSUE-506
+
+**Implementation scope:** scoring pipeline design only
+
+**Testing requirements:** idempotency strategy and accepted-vs-wrong attempts review
+
+**Acceptance criteria:** scoring is derived from `Submission` completion events and is not mixed into the judge worker itself
+
+---
+
+#### ISSUE-508 — Contest finalization and snapshot durability
+
+**Priority:** P0
+
+**Objective:** Define the `RUNNING -> ENDED -> FINALIZED` path and ensure standings become durable and reviewable.
+
+**Files likely affected:**
+- `packages/shared/models/Contest.js`
+- `packages/shared/models/ContestLeaderboardSnapshot.js`
+- `KODER_BACKEND_ROADMAP.md`
+
+**Dependencies:** ISSUE-507
+
+**Implementation scope:** finalization semantics and snapshot contract only
+
+**Testing requirements:** design review on repeated finalization, snapshot persistence, and final standings durability
+
+**Acceptance criteria:** a final snapshot is persisted and the contest cannot be re-opened once finalized
+
+---
+
+#### ISSUE-509 — Contest failure recovery and rehydration
+
+**Priority:** P1
+
+**Objective:** Define how contest state recovers after API, MongoDB, Redis, scheduler, or worker outages without trusting Redis as the permanent source of truth.
+
+**Files likely affected:**
+- `KODER_BACKEND_ROADMAP.md`
+- `PHASE_5_CONTEST_ENGINE.md`
+- `packages/shared/models/*`
+
+**Dependencies:** ISSUE-501, ISSUE-506, ISSUE-508
+
+**Implementation scope:** recovery, reconciliation, and rehydration design only
+
+**Testing requirements:** review of recovery scenarios for queue restarts, worker restarts, and scheduler outages
+
+**Acceptance criteria:** authoritative contest state can be reconstructed from MongoDB and contest metadata after infrastructure restarts
+
+---
+
+#### ISSUE-510 — Contest authorization and API surface
+
+**Priority:** P1
+
+**Objective:** Define admin, participant, and public API boundaries for contest operations without implementing them.
+
+**Files likely affected:**
+- `backend/routes/*.js`
+- `backend/middleware.js`
+- `KODER_BACKEND_ROADMAP.md`
+
+**Dependencies:** ISSUE-501, ISSUE-504, ISSUE-508
+
+**Implementation scope:** route-level permission model and API design
+
+**Testing requirements:** review of auth checks and separation of policy from business logic
+
+**Acceptance criteria:** contest auth is explicit and separate from domain logic
+
+---
+
+#### ISSUE-511 — Contest issue breakdown and dependency graph
+
+**Priority:** P1
+
+**Objective:** Place all contest-engine tasks in a dependency graph and implementation order that preserves correctness before scaling.
+
+**Files likely affected:**
+- `ISSUES.md`
+- `KODER_BACKEND_ROADMAP.md`
+- `PHASE_5_CONTEST_ENGINE.md`
+
+**Dependencies:** all Phase 5 design issues
+
+**Implementation scope:** documentation and planning only
+
+**Testing requirements:** dependency ordering review
+
+**Acceptance criteria:** tasks are sequenced from authoritative domain to delivery paths without trying to implement leaderboard/SSE/frontend too early
+
+---
+
+## Phase 5 Review Status
+
+The repository already satisfies the contest schema foundation requirements, and the remaining work is implementation sequencing, not schema invention. The authoritative design is:
+- MongoDB stores contest state, submission truth, and final standings
+- Redis stores live leaderboard projections and operational cache data
+- queue/worker execution remains unchanged from the existing judge path
+- contest logic is implemented only after the domain and timing rules are locked down
+
+No implementation code was modified during this architecture-review phase.
+
+---
+
 # Implementation Status
 
 ## Completed Phases

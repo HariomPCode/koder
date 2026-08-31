@@ -1,8 +1,17 @@
 # Koder — Master Backend Architecture & Scalability Roadmap
 
-**Status:** Phase 4 worker-infrastructure implementation complete; future contest, leaderboard, SSE, and frontend work remain later phases.
+**Status:** Phase 4 worker-infrastructure implementation complete; future contest, leaderboard, SSE, and frontend work remain later phases. Phase 5 is a design-only architecture review and does not implement contest code.
 **Grounded in:** direct inspection of the `koder-main` repository snapshot (backend, workers, packages/shared, frontend, docker-compose, README.md, ISSUES.md). Every claim about "current behavior" below is cited to a file path. Nothing about a typical online judge is assumed if it isn't in the code.
 **Numbering:** `ISSUES.md` already documents ISSUE-001 through ISSUE-015 (all closed). New issues in this roadmap are numbered **ISSUE-101+** to avoid collision.
+
+## Phase 5 — Contest Engine Architecture Review (docs-only)
+
+This repository already contains the contest data model foundation required by the roadmap:
+- `Contest`, `ContestParticipant`, and `ContestLeaderboardSnapshot` are present in `packages/shared/models/`.
+- `Submission` includes contest-scoped fields (`contestId`, `contestProblemId`, `submittedAtContestMs`).
+- `User` includes the contest-facing fields required by the foundation (`rating`, `contestsParticipated`, `highestRating`).
+
+This phase remains intentionally review-only. It is not a code-implementation phase. The authoritative contest domain remains MongoDB-based; Redis remains a live projection for leaderboard and related contest events rather than the source of truth. No implementation code should be added for leaderboard, Redis Streams, SSE, or frontend contest features.
 
 ---
 

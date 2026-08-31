@@ -56,7 +56,6 @@ const submissionRoute = require("./routes/submission.route");
 const adminRoute = require("./routes/admin.route");
 const { generateStarterCode } = require("@koder/shared");
 
-
 async function runTests() {
   console.log("=======================================================================");
   console.log("TESTING LANGUAGE CONTRACT CONSISTENCY (ISSUE-003)");
@@ -138,6 +137,7 @@ async function runTests() {
   app.use("/admin", adminRoute);
 
   const server = app.listen(0);
+  server.unref();
   const port = server.address().port;
   const baseUrl = `http://localhost:${port}`;
 
@@ -463,7 +463,11 @@ async function runTests() {
     });
 
   } finally {
-    server.close();
+    server.closeAllConnections?.();
+    server.closeIdleConnections?.();
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
   }
 
   console.log("\n=======================================================================");

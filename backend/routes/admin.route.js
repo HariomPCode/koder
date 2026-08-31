@@ -1,6 +1,7 @@
 const express = require("express");
 const Question = require("../models/Question");
 const User = require("../models/User");
+const ContestService = require("../services/contest.service");
 const { authMiddleware, adminMiddleware } = require("../middleware");
 const {
   generateStarterCode,
@@ -185,6 +186,110 @@ router.delete("/questions/:questionId", async (req, res, next) => {
     });
   } catch (err) {
     return next(err);
+  }
+});
+
+router.get("/contests", async (req, res, next) => {
+  try {
+    const result = await ContestService.listContests();
+    return res.json(result);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/contests/:contestId", async (req, res, next) => {
+  try {
+    const { contestId } = req.params;
+    const result = await ContestService.getContestById({ contestId, userId: req.userId });
+    return res.json(result);
+  } catch (error) {
+    if (error && error.statusCode === 404) {
+      return res.status(404).json({ message: error.message });
+    }
+    return next(error);
+  }
+});
+
+router.post("/contests", async (req, res, next) => {
+  try {
+    const result = await ContestService.createContest({
+      createdBy: req.userId,
+      payload: req.body || {},
+    });
+    return res.status(201).json(result);
+  } catch (error) {
+    if (error && error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    return next(error);
+  }
+});
+
+router.patch("/contests/:contestId", async (req, res, next) => {
+  try {
+    const { contestId } = req.params;
+    const result = await ContestService.updateContest({
+      contestId,
+      actorUserId: req.userId,
+      payload: req.body || {},
+    });
+    return res.json(result);
+  } catch (error) {
+    if (error && error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    return next(error);
+  }
+});
+
+router.post("/contests/:contestId/start", async (req, res, next) => {
+  try {
+    const { contestId } = req.params;
+    const result = await ContestService.transitionContestStatus({
+      contestId,
+      targetStatus: ContestService.CONTEST_STATUS.RUNNING,
+      actorUserId: req.userId,
+    });
+    return res.json(result);
+  } catch (error) {
+    if (error && error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    return next(error);
+  }
+});
+
+router.post("/contests/:contestId/end", async (req, res, next) => {
+  try {
+    const { contestId } = req.params;
+    const result = await ContestService.transitionContestStatus({
+      contestId,
+      targetStatus: ContestService.CONTEST_STATUS.ENDED,
+      actorUserId: req.userId,
+    });
+    return res.json(result);
+  } catch (error) {
+    if (error && error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    return next(error);
+  }
+});
+
+router.post("/contests/:contestId/finalize", async (req, res, next) => {
+  try {
+    const { contestId } = req.params;
+    const result = await ContestService.finalizeContest({
+      contestId,
+      actorUserId: req.userId,
+    });
+    return res.json(result);
+  } catch (error) {
+    if (error && error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    return next(error);
   }
 });
 

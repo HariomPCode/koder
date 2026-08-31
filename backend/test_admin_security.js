@@ -8,6 +8,19 @@ const { execSync } = require("child_process");
 process.env.JWT_SECRET = "test-secret-key-12345";
 process.env.NODE_ENV = "test";
 
+const queuePath = require.resolve("./queue");
+require.cache[queuePath] = {
+  id: queuePath,
+  filename: queuePath,
+  loaded: true,
+  exports: {
+    connection: { quit: async () => {}, disconnect: () => {} },
+    jsQueue: { add: async () => ({ id: "js-job-1" }) },
+    javaQueue: { add: async () => ({ id: "java-job-1" }) },
+    pythonQueue: { add: async () => ({ id: "python-job-1" }) },
+  },
+};
+
 const User = require("./models/User");
 const Question = require("./models/Question");
 const adminRoute = require("./routes/admin.route");
@@ -160,6 +173,7 @@ async function runTests() {
   app.use("/admin", adminRoute);
 
   const server = app.listen(0);
+  server.unref();
   const port = server.address().port;
   const baseUrl = `http://localhost:${port}`;
 
@@ -411,7 +425,11 @@ async function runTests() {
     });
 
   } finally {
-    server.close();
+    server.closeAllConnections?.();
+    server.closeIdleConnections?.();
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
   }
 
   console.log("\n=======================================================================");

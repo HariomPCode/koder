@@ -35,6 +35,7 @@ async function runTests() {
   app.use("/api/v1/user", userRoute);
 
   const server = app.listen(0);
+  server.unref();
   const baseUrl = `http://localhost:${server.address().port}`;
 
   try {
@@ -95,7 +96,11 @@ async function runTests() {
     console.log("✓ Logout clears the browser cookie and prevents subsequent cookie-less authentication");
     console.log("✓ Confirmed limitation: logout does not revoke a stateless JWT server-side");
   } finally {
-    server.close();
+    server.closeAllConnections?.();
+    server.closeIdleConnections?.();
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
   }
 }
 

@@ -14,8 +14,10 @@ require.cache[queuePath] = {
   filename: queuePath,
   loaded: true,
   exports: {
-    jsQueue: { add: async () => ({ id: "test-job" }) },
-    javaQueue: { add: async () => ({ id: "test-job" }) },
+    connection: { quit: async () => {}, disconnect: () => {} },
+    jsQueue: { add: async () => ({ id: "js-job-1" }) },
+    javaQueue: { add: async () => ({ id: "java-job-1" }) },
+    pythonQueue: { add: async () => ({ id: "python-job-1" }) },
   },
 };
 
@@ -24,6 +26,7 @@ const createApp = require("./app");
 async function runTests() {
   const app = createApp();
   const server = app.listen(0);
+  server.unref();
   const baseUrl = `http://localhost:${server.address().port}`;
   const token = jwt.sign(
     { userId: "60c72b2f9b1d8b0015f8e001" },
@@ -87,7 +90,11 @@ async function runTests() {
   } finally {
     Question.find = originalQuestionFind;
     Submission.findOne = originalSubmissionFindOne;
-    server.close();
+    server.closeAllConnections?.();
+    server.closeIdleConnections?.();
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
   }
 }
 
