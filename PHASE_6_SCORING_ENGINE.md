@@ -538,6 +538,40 @@ For contest C:
 - Phase 7 Redis rebuild input
 - Scheduled drift check (optional cron)
 
+### ISSUE-606 implementation contract
+
+`backend/services/scoring-reconcile.service.js` provides both contest-wide and
+participant-scoped reconciliation. It reads `Submission` through bounded
+Mongoose cursors, keeps only one participant/problem group in memory, and
+reuses the shared canonical ordering and penalty helpers. Each completed
+submission is checked against `ContestScoredSubmission`: missing rows are
+backfilled, stale `effect` values are corrected, and mismatched identity fields
+are reported without being rewritten.
+
+Reconciliation writes exact per-problem values (`$set`/upsert), then derives
+`ContestParticipant.solvedCount`, `totalPenalty`, and
+`lastAcceptedContestMs` exclusively from the expected per-problem projection.
+It never applies aggregate `$inc`. Unique-ledger duplicate errors are treated
+as concurrent backfill wins, so retries are safe. A structured result reports
+repairs, invalid source or ledger data, orphan rows, partial failures, and
+errors.
+
+Mutating reconciliation requires an existing admin actor and a non-empty
+recovery reason. `dryRun: true` performs no writes and may be used for audit.
+`RUNNING` reconciliation compares a source fingerprint before and after each
+bounded pass (three passes by default); if completed submission history keeps
+changing, the result is marked `unstable`, `incomplete`, and not converged.
+`ENDED` contests may be repaired normally. `FINALIZED` contests are audit-only
+and cannot be mutated by ISSUE-606.
+
+The admin-only endpoint is
+`POST /api/v1/admin/contests/:contestId/reconcile-scoring`. Omitting `userId`
+reconciles the contest; providing it performs participant-scoped recovery.
+The request supports `dryRun`, `batchSize`, `maxPasses`, and requires `reason`
+for mutation. This endpoint is a recovery/audit surface only; it does not
+change incremental scoring, finalization, snapshots, workers, or leaderboard
+delivery.
+
 ### Scoring state classification
 
 | Store | Role |
@@ -986,4 +1020,6 @@ Phase 6 implements ACM/ICPC-style penalty scoring as authoritative MongoDB proje
 - **ISSUE-602 ✅** — `ContestParticipantProblem`, `ContestScoredSubmission`, extended `ContestParticipant`, indexes
 - **ISSUE-603 ✅** — `applySubmissionResult` processor, `updateSubmission` scoring hook, `backend/test_scoring_engine.js`
 - **ISSUE-604 ✅** — idempotent processing with `reconcileParticipantAggregate()` and duplicate-ledger reconcile-on-retry
-- **ISSUE-605+** — pending (out-of-order hardening, reconciliation, finalization snapshot, standings API)
+- **ISSUE-605 ✅** — out-of-order and concurrent scoring validation
+- **ISSUE-606 ✅** — contest-wide reconciliation and drift recovery
+- **ISSUE-607+** — pending (finalization snapshot, standings API)

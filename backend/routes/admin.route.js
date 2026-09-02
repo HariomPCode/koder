@@ -2,6 +2,7 @@ const express = require("express");
 const Question = require("../models/Question");
 const User = require("../models/User");
 const ContestService = require("../services/contest.service");
+const ScoringService = require("../services/scoring.service");
 const { authMiddleware, adminMiddleware } = require("../middleware");
 const {
   generateStarterCode,
@@ -284,6 +285,34 @@ router.post("/contests/:contestId/finalize", async (req, res, next) => {
       contestId,
       actorUserId: req.userId,
     });
+    return res.json(result);
+  } catch (error) {
+    if (error && error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    return next(error);
+  }
+});
+
+router.post("/contests/:contestId/reconcile-scoring", async (req, res, next) => {
+  try {
+    const { contestId } = req.params;
+    const { userId = null, dryRun = false, batchSize, maxPasses, reason } = req.body || {};
+    const result = userId
+      ? await ScoringService.reconcileParticipantScoring(contestId, userId, {
+          actorUserId: req.userId,
+          dryRun,
+          batchSize,
+          maxPasses,
+          recoveryReason: reason,
+        })
+      : await ScoringService.reconcileContestScoring(contestId, {
+          actorUserId: req.userId,
+          dryRun,
+          batchSize,
+          maxPasses,
+          recoveryReason: reason,
+        });
     return res.json(result);
   } catch (error) {
     if (error && error.statusCode) {
