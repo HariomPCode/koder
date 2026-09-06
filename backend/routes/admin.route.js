@@ -281,9 +281,12 @@ router.post("/contests/:contestId/end", async (req, res, next) => {
 router.post("/contests/:contestId/finalize", async (req, res, next) => {
   try {
     const { contestId } = req.params;
+    const { force = false, reason = "" } = req.body || {};
     const result = await ContestService.finalizeContest({
       contestId,
       actorUserId: req.userId,
+      force,
+      reason,
     });
     return res.json(result);
   } catch (error) {

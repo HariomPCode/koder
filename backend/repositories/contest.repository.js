@@ -1,4 +1,10 @@
-const { Contest, ContestParticipant, Submission } = require("@koder/shared");
+const {
+  Contest,
+  ContestParticipant,
+  Submission,
+  ContestLeaderboardSnapshot,
+  ContestFinalizationAudit,
+} = require("@koder/shared");
 
 class ContestRepository {
   async create(data) {
@@ -41,6 +47,70 @@ class ContestRepository {
     return ContestParticipant.find({ contestId }).sort({ registeredAt: -1 }).lean();
   }
 
+  async countParticipants(contestId) {
+    return ContestParticipant.countDocuments({ contestId });
+  }
+
+  async findParticipantsPaginated(contestId, { skip = 0, limit = 50 } = {}) {
+    return ContestParticipant.find({ contestId })
+      .sort({
+        solvedCount: -1,
+        totalPenalty: 1,
+        lastAcceptedContestMs: 1,
+        userId: 1,
+      })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+  }
+
+  async findParticipantAtOffset(contestId, offset) {
+    if (offset < 0) {
+      return null;
+    }
+    return ContestParticipant.findOne({ contestId })
+      .sort({
+        solvedCount: -1,
+        totalPenalty: 1,
+        lastAcceptedContestMs: 1,
+        userId: 1,
+      })
+      .skip(offset)
+      .lean();
+  }
+
+  async countParticipantsAhead(contestId, participant) {
+    const pSolved = participant.solvedCount || 0;
+    const pPenalty = participant.totalPenalty || 0;
+    const pLastMs = participant.lastAcceptedContestMs ?? null;
+    const pUserId = participant.userId;
+
+    const aheadFilter = {
+      contestId,
+      $or: [
+        { solvedCount: { $gt: pSolved } },
+        {
+          solvedCount: pSolved,
+          totalPenalty: { $lt: pPenalty },
+        },
+        {
+          solvedCount: pSolved,
+          totalPenalty: pPenalty,
+          ...(pLastMs != null
+            ? { lastAcceptedContestMs: { $lt: pLastMs } }
+            : { lastAcceptedContestMs: { $ne: null } }),
+        },
+        {
+          solvedCount: pSolved,
+          totalPenalty: pPenalty,
+          lastAcceptedContestMs: pLastMs,
+          userId: { $lt: pUserId },
+        },
+      ],
+    };
+    return ContestParticipant.countDocuments(aheadFilter);
+  }
+
   async listSubmissions(contestId, userId = null) {
     const criteria = { contestId };
     if (userId) {
@@ -59,6 +129,18 @@ class ContestRepository {
     }
 
     return contest.problems.find((problem) => String(problem._id) === String(contestProblemId)) || null;
+  }
+
+  async findFinalSnapshot(contestId) {
+    return ContestLeaderboardSnapshot.findOne({ contestId, isFinal: true }).lean();
+  }
+
+  async findFinalizationAudit(contestId) {
+    return ContestFinalizationAudit.findOne({ contestId, forced: true }).lean();
+  }
+
+  async createFinalizationAudit(data) {
+    return ContestFinalizationAudit.create(data);
   }
 }
 

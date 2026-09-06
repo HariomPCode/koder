@@ -1,3 +1,4 @@
+const ContestFinalizationAudit = require("../models/ContestFinalizationAudit");
 const User = require("../models/User");
 const ScoringRepository = require("../repositories/scoring.repository");
 const SubmissionRepository = require("../repositories/submission.repository");
@@ -16,6 +17,24 @@ const MUTABLE_CONTEST_STATUSES = new Set(["RUNNING", "ENDED"]);
 const AUDIT_ONLY_CONTEST_STATUS = "FINALIZED";
 const DEFAULT_BATCH_SIZE = 100;
 const DEFAULT_MAX_PASSES = 3;
+
+async function resolveExcludedSubmissionIds(contest, options) {
+  let excluded = Array.isArray(options.excludeSubmissionIds)
+    ? [...options.excludeSubmissionIds]
+    : [];
+
+  if (excluded.length === 0 && contest.status === AUDIT_ONLY_CONTEST_STATUS) {
+    const audit = await ContestFinalizationAudit.findOne({
+      contestId: contest._id,
+      forced: true,
+    }).lean();
+    if (audit && Array.isArray(audit.pendingSubmissionIds)) {
+      excluded = audit.pendingSubmissionIds;
+    }
+  }
+
+  return excluded;
+}
 
 function duplicateKey(error) {
   return Boolean(error && (error.code === 11000 || error.code === 11001));
@@ -211,6 +230,7 @@ async function reconcileParticipantInternal({
     contestId: contest._id,
     userId,
     batchSize: options.batchSize,
+    excludeSubmissionIds: options.excludeSubmissionIds,
   });
 
   let currentKey = null;
@@ -349,15 +369,28 @@ async function reconcileParticipantScoring(contestId, userId, options = {}) {
     }
   }
 
+  const excludeSubmissionIds = await resolveExcludedSubmissionIds(contest, options);
   const report = createReport({ contestId, userId, dryRun, status: contest.status });
   const maxPasses = Math.max(1, options.maxPasses || DEFAULT_MAX_PASSES);
+  const effectiveBatchSize = options.batchSize || DEFAULT_BATCH_SIZE;
+
   for (let pass = 1; pass <= maxPasses; pass += 1) {
-    const before = await SubmissionRepository.getContestSourceFingerprint(contestId, userId);
+    const before = await SubmissionRepository.getContestSourceFingerprint(
+      contestId,
+      userId,
+      effectiveBatchSize,
+      excludeSubmissionIds,
+    );
     try {
       await reconcileParticipantInternal({
         contest,
         userId,
-        options: { ...options, dryRun, batchSize: options.batchSize || DEFAULT_BATCH_SIZE },
+        options: {
+          ...options,
+          dryRun,
+          batchSize: effectiveBatchSize,
+          excludeSubmissionIds,
+        },
         report,
       });
     } catch (error) {
@@ -365,7 +398,12 @@ async function reconcileParticipantScoring(contestId, userId, options = {}) {
       report.incomplete = true;
       report.errors.push(error.message);
     }
-    const after = await SubmissionRepository.getContestSourceFingerprint(contestId, userId);
+    const after = await SubmissionRepository.getContestSourceFingerprint(
+      contestId,
+      userId,
+      effectiveBatchSize,
+      excludeSubmissionIds,
+    );
     report.passes = pass;
     if (JSON.stringify(before) === JSON.stringify(after)) {
       break;
@@ -423,13 +461,21 @@ async function reconcileContestScoring(contestId, options = {}) {
     }
   }
 
+  const excludeSubmissionIds = await resolveExcludedSubmissionIds(contest, options);
   const report = createReport({ contestId, dryRun, status: contest.status });
   const maxPasses = Math.max(1, options.maxPasses || DEFAULT_MAX_PASSES);
+  const effectiveBatchSize = options.batchSize || DEFAULT_BATCH_SIZE;
+
   for (let pass = 1; pass <= maxPasses; pass += 1) {
-    const before = await SubmissionRepository.getContestSourceFingerprint(contestId);
+    const before = await SubmissionRepository.getContestSourceFingerprint(
+      contestId,
+      null,
+      effectiveBatchSize,
+      excludeSubmissionIds,
+    );
     const participantCursor = ScoringRepository.findParticipantsCursor(
       contestId,
-      options.batchSize || DEFAULT_BATCH_SIZE,
+      effectiveBatchSize,
     );
     try {
       for await (const participant of participantCursor) {
@@ -437,7 +483,12 @@ async function reconcileContestScoring(contestId, options = {}) {
           await reconcileParticipantInternal({
             contest,
             userId: participant.userId,
-            options: { ...options, dryRun, batchSize: options.batchSize || DEFAULT_BATCH_SIZE },
+            options: {
+              ...options,
+              dryRun,
+              batchSize: effectiveBatchSize,
+              excludeSubmissionIds,
+            },
             report,
           });
         } catch (error) {
@@ -449,7 +500,12 @@ async function reconcileContestScoring(contestId, options = {}) {
     } finally {
       await participantCursor.close();
     }
-    const after = await SubmissionRepository.getContestSourceFingerprint(contestId);
+    const after = await SubmissionRepository.getContestSourceFingerprint(
+      contestId,
+      null,
+      effectiveBatchSize,
+      excludeSubmissionIds,
+    );
     report.passes = pass;
     if (JSON.stringify(before) === JSON.stringify(after)) {
       break;

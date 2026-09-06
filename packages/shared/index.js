@@ -11,6 +11,7 @@ const ContestParticipant = require("./models/ContestParticipant");
 const ContestParticipantProblem = require("./models/ContestParticipantProblem");
 const ContestScoredSubmission = require("./models/ContestScoredSubmission");
 const ContestLeaderboardSnapshot = require("./models/ContestLeaderboardSnapshot");
+const ContestFinalizationAudit = require("./models/ContestFinalizationAudit");
 const dbCalls = require("./db/dbCalls");
 const scoringProcessor = require("./scoring/applySubmissionResult");
 
@@ -28,6 +29,7 @@ module.exports = {
   ContestParticipantProblem,
   ContestScoredSubmission,
   ContestLeaderboardSnapshot,
+  ContestFinalizationAudit,
   ...dbCalls,
   ...scoringProcessor,
 };

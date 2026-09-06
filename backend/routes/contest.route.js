@@ -106,4 +106,32 @@ router.get("/:contestId/submissions", middleware, async (req, res, next) => {
   }
 });
 
+router.get("/:contestId/standings/me", middleware, async (req, res, next) => {
+  try {
+    const { contestId } = req.params;
+    const userId = req.userId;
+    const result = await ContestService.getMyContestStanding({ contestId, userId });
+    return res.json(result);
+  } catch (error) {
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    return next(error);
+  }
+});
+
+router.get("/:contestId/standings", async (req, res, next) => {
+  try {
+    const { contestId } = req.params;
+    const { page, limit } = req.query;
+    const result = await ContestService.getContestStandings({ contestId, page, limit });
+    return res.json(result);
+  } catch (error) {
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    return next(error);
+  }
+});
+
 module.exports = router;

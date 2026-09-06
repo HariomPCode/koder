@@ -1,8 +1,21 @@
-const { Contest, ContestParticipant, Question, Submission, SUPPORTED_LANGUAGES, normalizeLanguage, SUBMISSION_STATUS } = require("@koder/shared");
+const {
+  Contest,
+  ContestParticipant,
+  Question,
+  Submission,
+  ContestLeaderboardSnapshot,
+  ContestFinalizationAudit,
+  assignCompetitionRanks,
+  compareParticipantStandings,
+  SUPPORTED_LANGUAGES,
+  normalizeLanguage,
+  SUBMISSION_STATUS,
+} = require("@koder/shared");
 const ContestRepository = require("../repositories/contest.repository");
 const AppError = require("../errors/appError");
 const queue = require("../queue");
 const { validateSubmissionPayload } = require("../validators/request.validators");
+const ScoringReconcileService = require("./scoring-reconcile.service");
 
 const CONTEST_STATUS = Object.freeze({
   DRAFT: "DRAFT",
@@ -174,8 +187,8 @@ async function transitionContestStatus({ contestId, targetStatus, actorUserId })
     }
   }
 
-  if (normalizedTarget === CONTEST_STATUS.FINALIZED && currentStatus !== CONTEST_STATUS.ENDED) {
-    throw AppError.badRequest("Contest must be ENDED before it can be FINALIZED");
+  if (normalizedTarget === CONTEST_STATUS.FINALIZED) {
+    return finalizeContest({ contestId, actorUserId });
   }
 
   contest.status = normalizedTarget;
@@ -363,7 +376,7 @@ async function getContestSubmissions({ contestId, userId = null, requesterUserId
   return { submissions };
 }
 
-async function finalizeContest({ contestId, actorUserId }) {
+async function finalizeContest({ contestId, actorUserId, force = false, reason = "" }) {
   const contest = await ContestRepository.findById(contestId);
   if (!contest) {
     throw AppError.notFound("Contest not found");
@@ -374,18 +387,352 @@ async function finalizeContest({ contestId, actorUserId }) {
     throw AppError.forbidden("Only admins may finalize contests");
   }
 
-  if (contest.status === CONTEST_STATUS.FINALIZED) {
-    return { contest };
+  if (normalizeContestStatus(contest.status) === CONTEST_STATUS.FINALIZED) {
+    const existingSnapshot = await ContestRepository.findFinalSnapshot(contestId);
+    return {
+      contest: contest.toObject ? contest.toObject() : contest,
+      snapshot: existingSnapshot,
+    };
   }
 
-  if (contest.status !== CONTEST_STATUS.ENDED) {
+  const currentContest = await syncContestLifecycle(contest);
+
+  if (normalizeContestStatus(currentContest.status) !== CONTEST_STATUS.ENDED) {
     throw AppError.badRequest("Contest must be ENDED before finalization");
   }
 
-  contest.status = CONTEST_STATUS.FINALIZED;
-  await contest.save();
+  const pendingStatuses = [
+    SUBMISSION_STATUS.CREATED,
+    SUBMISSION_STATUS.QUEUED,
+    SUBMISSION_STATUS.PENDING,
+    SUBMISSION_STATUS.RUNNING,
+  ];
 
-  return { contest };
+  const pendingSubmissions = await Submission.find({
+    contestId: currentContest._id,
+    status: { $in: pendingStatuses },
+  }).lean();
+
+  const hasPending = pendingSubmissions.length > 0;
+  const isForced = force === true;
+
+  if (hasPending && !isForced) {
+    throw AppError.badRequest(
+      `Cannot finalize contest: ${pendingSubmissions.length} pending submission(s) remain in queue or judging. Strict drain required, or use force=true with a reason.`,
+    );
+  }
+
+  let auditRecord = null;
+  const pendingSubmissionIds = pendingSubmissions.map((s) => s._id);
+
+  if (isForced) {
+    const trimmedReason = typeof reason === "string" ? reason.trim() : "";
+    if (!trimmedReason) {
+      throw AppError.badRequest("A non-empty reason is required for force-finalization");
+    }
+
+    auditRecord = await ContestRepository.createFinalizationAudit({
+      contestId: currentContest._id,
+      actorUserId: actor._id,
+      forced: true,
+      finalizedAt: new Date(),
+      pendingSubmissionCount: pendingSubmissions.length,
+      pendingSubmissionIds,
+      reason: trimmedReason,
+    });
+  }
+
+  // Pre-finalization scoring reconciliation
+  const reconcileReport = await ScoringReconcileService.reconcileContestScoring(currentContest._id, {
+    actorUserId: actor._id,
+    dryRun: false,
+    recoveryReason: isForced
+      ? `Force-finalization reconciliation: ${typeof reason === "string" ? reason.trim() : ""}`
+      : "Pre-finalization scoring reconciliation",
+    excludeSubmissionIds: pendingSubmissionIds,
+  });
+
+  if (
+    !reconcileReport ||
+    !reconcileReport.converged ||
+    !reconcileReport.completed ||
+    reconcileReport.unstable ||
+    reconcileReport.partialFailure
+  ) {
+    throw AppError.badRequest(
+      "Finalization aborted: scoring reconciliation did not converge or encountered errors",
+    );
+  }
+
+  // Build final standings snapshot
+  const participants = await ContestParticipant.find({ contestId: currentContest._id }).lean();
+  const rankedParticipants = assignCompetitionRanks(participants);
+
+  const standings = rankedParticipants.map((p) => {
+    const lastAcceptedAt =
+      p.solvedCount > 0 && p.lastAcceptedContestMs != null
+        ? new Date(new Date(currentContest.startTime).getTime() + p.lastAcceptedContestMs)
+        : null;
+
+    return {
+      userId: p.userId,
+      rank: p.rank,
+      solvedCount: p.solvedCount || 0,
+      score: p.solvedCount || 0,
+      penalty: p.totalPenalty || 0,
+      ...(lastAcceptedAt ? { lastAcceptedAt } : {}),
+    };
+  });
+
+  const snapshotData = {
+    contestId: currentContest._id,
+    takenAt: new Date(),
+    isFinal: true,
+    standings,
+  };
+
+  let snapshot;
+  try {
+    snapshot = await ContestLeaderboardSnapshot.create(snapshotData);
+  } catch (err) {
+    if (err && (err.code === 11000 || err.code === 11001)) {
+      snapshot = await ContestRepository.findFinalSnapshot(currentContest._id);
+    } else {
+      throw err;
+    }
+  }
+
+  const updatedContest = await Contest.findOneAndUpdate(
+    { _id: currentContest._id, status: CONTEST_STATUS.ENDED },
+    { $set: { status: CONTEST_STATUS.FINALIZED } },
+    { returnDocument: "after" },
+  );
+
+  const finalContest = updatedContest || (await Contest.findById(currentContest._id));
+
+  return {
+    contest: finalContest.toObject ? finalContest.toObject() : finalContest,
+    snapshot: snapshot && snapshot.toObject ? snapshot.toObject() : snapshot,
+    ...(auditRecord ? { audit: auditRecord.toObject ? auditRecord.toObject() : auditRecord } : {}),
+  };
+}
+
+async function getContestStandings({ contestId, page = 1, limit = 50 }) {
+  const contest = await ContestRepository.findById(contestId);
+  if (!contest) {
+    throw AppError.notFound("Contest not found");
+  }
+
+  const currentContest = await syncContestLifecycle(contest);
+  const normalizedStatus = normalizeContestStatus(currentContest.status);
+
+  if (normalizedStatus === CONTEST_STATUS.DRAFT) {
+    throw AppError.notFound("Contest not found");
+  }
+
+  const allowedStatuses = [
+    CONTEST_STATUS.RUNNING,
+    CONTEST_STATUS.ENDED,
+    CONTEST_STATUS.FINALIZED,
+  ];
+  if (!allowedStatuses.includes(normalizedStatus)) {
+    throw AppError.badRequest("Standings are not available for this contest");
+  }
+
+  const parsedPage = Math.max(1, parseInt(page, 10) || 1);
+  const parsedLimit = Math.max(1, Math.min(100, parseInt(limit, 10) || 50));
+  const skip = (parsedPage - 1) * parsedLimit;
+
+  // 1. FINALIZED: read from ContestLeaderboardSnapshot
+  if (normalizedStatus === CONTEST_STATUS.FINALIZED) {
+    const snapshot = await ContestRepository.findFinalSnapshot(currentContest._id);
+    const allStandings = snapshot?.standings || [];
+    const total = allStandings.length;
+    const paged = allStandings.slice(skip, skip + parsedLimit);
+    const standings = paged.map((s) => ({
+      userId: s.userId,
+      rank: s.rank,
+      solvedCount: s.solvedCount,
+      score: s.score ?? s.solvedCount,
+      penalty: s.penalty,
+      ...(s.lastAcceptedAt ? { lastAcceptedAt: s.lastAcceptedAt } : {}),
+    }));
+
+    return {
+      contestId: currentContest._id,
+      status: currentContest.status,
+      standings,
+      pagination: {
+        page: parsedPage,
+        limit: parsedLimit,
+        total,
+        totalPages: Math.ceil(total / parsedLimit) || 0,
+      },
+    };
+  }
+
+  // 2. NON-FINALIZED (RUNNING / ENDED): read from ContestParticipant aggregate
+  const total = await ContestRepository.countParticipants(currentContest._id);
+  if (total === 0) {
+    return {
+      contestId: currentContest._id,
+      status: currentContest.status,
+      standings: [],
+      pagination: {
+        page: parsedPage,
+        limit: parsedLimit,
+        total: 0,
+        totalPages: 0,
+      },
+    };
+  }
+
+  const participants = await ContestRepository.findParticipantsPaginated(
+    currentContest._id,
+    { skip, limit: parsedLimit },
+  );
+
+  let prevEntry = null;
+  let prevRank = null;
+  if (skip > 0) {
+    prevEntry = await ContestRepository.findParticipantAtOffset(currentContest._id, skip - 1);
+    if (prevEntry) {
+      prevRank = (await ContestRepository.countParticipantsAhead(currentContest._id, prevEntry)) + 1;
+    }
+  }
+
+  const rankedParticipants = [];
+  for (let index = 0; index < participants.length; index += 1) {
+    const entry = participants[index];
+    let rank;
+    if (index > 0) {
+      const prev = participants[index - 1];
+      if (compareParticipantStandings(entry, prev) === 0) {
+        rank = rankedParticipants[index - 1].rank;
+      } else {
+        rank = skip + index + 1;
+      }
+    } else if (prevEntry && compareParticipantStandings(entry, prevEntry) === 0) {
+      rank = prevRank;
+    } else {
+      rank = skip + 1;
+    }
+    rankedParticipants.push({ ...entry, rank });
+  }
+
+  const standings = rankedParticipants.map((p) => {
+    const lastAcceptedAt =
+      p.solvedCount > 0 && p.lastAcceptedContestMs != null
+        ? new Date(new Date(currentContest.startTime).getTime() + p.lastAcceptedContestMs)
+        : null;
+
+    return {
+      userId: p.userId,
+      rank: p.rank,
+      solvedCount: p.solvedCount || 0,
+      score: p.solvedCount || 0,
+      penalty: p.totalPenalty || 0,
+      ...(lastAcceptedAt ? { lastAcceptedAt } : {}),
+    };
+  });
+
+  return {
+    contestId: currentContest._id,
+    status: currentContest.status,
+    standings,
+    pagination: {
+      page: parsedPage,
+      limit: parsedLimit,
+      total,
+      totalPages: Math.ceil(total / parsedLimit) || 0,
+    },
+  };
+}
+
+async function getMyContestStanding({ contestId, userId }) {
+  if (!userId) {
+    throw AppError.unauthorized("Authentication required");
+  }
+
+  const contest = await ContestRepository.findById(contestId);
+  if (!contest) {
+    throw AppError.notFound("Contest not found");
+  }
+
+  const currentContest = await syncContestLifecycle(contest);
+  const normalizedStatus = normalizeContestStatus(currentContest.status);
+
+  if (normalizedStatus === CONTEST_STATUS.DRAFT) {
+    throw AppError.notFound("Contest not found");
+  }
+
+  const allowedStatuses = [
+    CONTEST_STATUS.RUNNING,
+    CONTEST_STATUS.ENDED,
+    CONTEST_STATUS.FINALIZED,
+  ];
+  if (!allowedStatuses.includes(normalizedStatus)) {
+    throw AppError.badRequest("Standings are not available for this contest");
+  }
+
+  // 1. FINALIZED: read from ContestLeaderboardSnapshot
+  if (normalizedStatus === CONTEST_STATUS.FINALIZED) {
+    const snapshot = await ContestRepository.findFinalSnapshot(currentContest._id);
+    const standing = snapshot?.standings?.find(
+      (s) => String(s.userId) === String(userId),
+    );
+
+    if (!standing) {
+      throw AppError.notFound("Participant not registered for this contest");
+    }
+
+    const formattedStanding = {
+      userId: standing.userId,
+      rank: standing.rank,
+      solvedCount: standing.solvedCount,
+      score: standing.score ?? standing.solvedCount,
+      penalty: standing.penalty,
+      ...(standing.lastAcceptedAt ? { lastAcceptedAt: standing.lastAcceptedAt } : {}),
+    };
+
+    return {
+      contestId: currentContest._id,
+      standing: formattedStanding,
+      ...formattedStanding,
+    };
+  }
+
+  // 2. NON-FINALIZED (RUNNING / ENDED): read from ContestParticipant
+  const participant = await ContestRepository.findParticipant(currentContest._id, userId);
+  if (!participant) {
+    throw AppError.notFound("Participant not registered for this contest");
+  }
+
+  const aheadCount = await ContestRepository.countParticipantsAhead(
+    currentContest._id,
+    participant,
+  );
+  const rank = aheadCount + 1;
+
+  const lastAcceptedAt =
+    participant.solvedCount > 0 && participant.lastAcceptedContestMs != null
+      ? new Date(new Date(currentContest.startTime).getTime() + participant.lastAcceptedContestMs)
+      : null;
+
+  const formattedStanding = {
+    userId: participant.userId,
+    rank,
+    solvedCount: participant.solvedCount || 0,
+    score: participant.solvedCount || 0,
+    penalty: participant.totalPenalty || 0,
+    ...(lastAcceptedAt ? { lastAcceptedAt } : {}),
+  };
+
+  return {
+    contestId: currentContest._id,
+    standing: formattedStanding,
+    ...formattedStanding,
+  };
 }
 
 module.exports = {
@@ -404,4 +751,6 @@ module.exports = {
   createContestSubmission,
   getContestSubmissions,
   finalizeContest,
+  getContestStandings,
+  getMyContestStanding,
 };

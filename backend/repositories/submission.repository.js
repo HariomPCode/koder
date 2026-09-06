@@ -40,13 +40,21 @@ class SubmissionRepository {
     });
   }
 
-  findCompletedContestCursor({ contestId, userId = null, batchSize = 100 }) {
+  findCompletedContestCursor({
+    contestId,
+    userId = null,
+    batchSize = 100,
+    excludeSubmissionIds = [],
+  }) {
     const criteria = {
       contestId,
       status: SUBMISSION_STATUS.COMPLETED,
     };
     if (userId) {
       criteria.userId = userId;
+    }
+    if (Array.isArray(excludeSubmissionIds) && excludeSubmissionIds.length > 0) {
+      criteria._id = { $nin: excludeSubmissionIds };
     }
     return Submission.find(criteria)
       .sort({ userId: 1, contestProblemId: 1, submittedAtContestMs: 1, _id: 1 })
@@ -55,13 +63,21 @@ class SubmissionRepository {
       .cursor({ batchSize });
   }
 
-  async getContestSourceFingerprint(contestId, userId = null, batchSize = 100) {
+  async getContestSourceFingerprint(
+    contestId,
+    userId = null,
+    batchSize = 100,
+    excludeSubmissionIds = [],
+  ) {
     const criteria = {
       contestId,
       status: SUBMISSION_STATUS.COMPLETED,
     };
     if (userId) {
       criteria.userId = userId;
+    }
+    if (Array.isArray(excludeSubmissionIds) && excludeSubmissionIds.length > 0) {
+      criteria._id = { $nin: excludeSubmissionIds };
     }
     const hash = crypto.createHash("sha256");
     const cursor = Submission.find(criteria)

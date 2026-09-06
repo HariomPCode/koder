@@ -60,8 +60,49 @@ const contestLeaderboardSnapshotSchema = new mongoose.Schema(
   },
 );
 
-contestLeaderboardSnapshotSchema.index({ contestId: 1, isFinal: 1 });
+contestLeaderboardSnapshotSchema.index(
+  { contestId: 1, isFinal: 1 },
+  { unique: true, partialFilterExpression: { isFinal: true } },
+);
 contestLeaderboardSnapshotSchema.index({ contestId: 1, takenAt: -1 });
+
+contestLeaderboardSnapshotSchema.pre("save", function () {
+  if (!this.isNew && this.isFinal) {
+    throw new Error("Final leaderboard snapshot is immutable");
+  }
+});
+
+contestLeaderboardSnapshotSchema.pre(
+  "deleteOne",
+  { document: true, query: false },
+  function () {
+    if (this.isFinal) {
+      throw new Error("Final leaderboard snapshot is immutable");
+    }
+  },
+);
+
+contestLeaderboardSnapshotSchema.pre(
+  ["updateOne", "updateMany", "findOneAndUpdate"],
+  async function () {
+    const filter = this.getFilter ? this.getFilter() : {};
+    const doc = await this.model.findOne(filter);
+    if (doc && doc.isFinal) {
+      throw new Error("Final leaderboard snapshot is immutable");
+    }
+  },
+);
+
+contestLeaderboardSnapshotSchema.pre(
+  ["deleteOne", "deleteMany", "findOneAndDelete"],
+  async function () {
+    const filter = this.getFilter ? this.getFilter() : {};
+    const doc = await this.model.findOne(filter);
+    if (doc && doc.isFinal) {
+      throw new Error("Final leaderboard snapshot is immutable");
+    }
+  },
+);
 
 const ContestLeaderboardSnapshot =
   mongoose.models.ContestLeaderboardSnapshot ||

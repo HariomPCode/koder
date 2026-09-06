@@ -3,6 +3,7 @@ const Contest = require("../models/Contest");
 const ContestParticipant = require("../models/ContestParticipant");
 const ContestParticipantProblem = require("../models/ContestParticipantProblem");
 const ContestScoredSubmission = require("../models/ContestScoredSubmission");
+const ContestFinalizationAudit = require("../models/ContestFinalizationAudit");
 const { SUBMISSION_STATUS } = require("../contracts/verdicts");
 const {
   SCORING_EFFECT,
@@ -292,8 +293,26 @@ async function applySubmissionResult(submissionId, options = {}) {
     return { processed: false, reason: "contest_not_found" };
   }
 
+  if (contest.status === "FINALIZED") {
+    console.warn(
+      `Scoring attempt on FINALIZED contest ${contest._id} for submission ${submission._id} ignored`,
+    );
+    return { processed: false, reason: "contest_finalized", contestStatus: contest.status };
+  }
+
   if (!CONTEST_SCORING_ELIGIBLE_STATUSES.has(contest.status)) {
     return { processed: false, reason: "contest_not_eligible", contestStatus: contest.status };
+  }
+
+  const isForceExcluded = await ContestFinalizationAudit.exists({
+    contestId: submission.contestId,
+    pendingSubmissionIds: submission._id,
+  });
+  if (isForceExcluded) {
+    console.warn(
+      `Scoring attempt on force-excluded submission ${submission._id} for contest ${submission.contestId} ignored`,
+    );
+    return { processed: false, reason: "submission_force_excluded", contestStatus: contest.status };
   }
 
   const participant = await ContestParticipant.findOne({
