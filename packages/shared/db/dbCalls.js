@@ -2,10 +2,31 @@ const Submission = require("../models/Submission");
 const Question = require("../models/Question");
 const { SUBMISSION_STATUS } = require("../contracts/verdicts");
 const { applySubmissionResult } = require("../scoring/applySubmissionResult");
+const {
+  enqueueLeaderboardProjectionIfConfigured,
+} = require("../leaderboard/projectionIntegration");
 
-async function triggerContestScoring(submissionId, submissionDocument = null) {
+async function triggerContestScoring(
+  submissionId,
+  submissionDocument = null,
+  { onProjectionFailure = null, applyScoring = applySubmissionResult } = {},
+) {
   try {
-    await applySubmissionResult(submissionId, { submission: submissionDocument });
+    const scoringResult = await applyScoring(submissionId, { submission: submissionDocument });
+    if (
+      scoringResult?.projectionRequired &&
+      submissionDocument?.contestId &&
+      submissionDocument?.userId
+    ) {
+      const projectionResult = await enqueueLeaderboardProjectionIfConfigured({
+        contestId: submissionDocument.contestId,
+        userId: submissionDocument.userId,
+      });
+      if (!projectionResult.enqueued && projectionResult.reason === "enqueue_failed") {
+        onProjectionFailure?.(projectionResult.error);
+      }
+    }
+    return scoringResult;
   } catch (error) {
     console.error(
       `Contest scoring failed for submission ${submissionId}:`,
@@ -54,7 +75,11 @@ async function markSubmissionRunning(submissionId, { SubmissionModel = Submissio
   );
 }
 
-async function updateSubmission(submissionId, result, { SubmissionModel = Submission } = {}) {
+async function updateSubmission(
+  submissionId,
+  result,
+  { SubmissionModel = Submission, onProjectionFailure = null } = {},
+) {
   const terminalStatus = result.status || SUBMISSION_STATUS.COMPLETED;
   const submission = await SubmissionModel.findOneAndUpdate(
     {
@@ -87,19 +112,20 @@ async function updateSubmission(submissionId, result, { SubmissionModel = Submis
       existingSubmission.status === SUBMISSION_STATUS.COMPLETED &&
       existingSubmission.contestId
     ) {
-      await triggerContestScoring(submissionId, existingSubmission);
+      await triggerContestScoring(submissionId, existingSubmission, { onProjectionFailure });
     }
     return null;
   }
 
   if (submission.contestId) {
-    await triggerContestScoring(submissionId, submission);
+    await triggerContestScoring(submissionId, submission, { onProjectionFailure });
   }
 
   return submission;
 }
 
 module.exports = {
+  triggerContestScoring,
   getQuestionDetails,
   markSubmissionRunning,
   updateSubmission,

@@ -20,6 +20,13 @@ const {
 } = require("./hostCapacity");
 const cleanupOrphanContainers = require("./orphanContainerCleanup");
 const connectDB = require("./db");
+const {
+  enqueueLeaderboardProjection,
+  closeLeaderboardProjectionProducer,
+} = require("../leaderboard/producer");
+const { setLeaderboardProjectionEnqueuer } = require("@koder/shared");
+
+setLeaderboardProjectionEnqueuer(enqueueLeaderboardProjection);
 
 function createCapacityGuard(queueName, wrappedProcessor) {
   return async function guardedProcessor(job) {
@@ -98,6 +105,13 @@ async function createWorker(queueName, processor) {
           memory: 0,
           failedTestCase: null,
           errorMessage: err?.message || "Execution failed",
+        }, {
+          onProjectionFailure: (projectionError) => {
+            console.error(
+              `Leaderboard projection enqueue failed after submission ${job.data.submissionId}:`,
+              projectionError?.message || projectionError,
+            );
+          },
         });
       } catch (dbErr) {
         console.error("Failed to update submission on job failure:", dbErr);
@@ -113,6 +127,7 @@ async function createWorker(queueName, processor) {
     try {
       console.log(`Shutting down ${queueName} worker on ${signal}...`);
       await worker.close(true);
+      await closeLeaderboardProjectionProducer();
       await connection.quit();
       process.exit(0);
     } catch (error) {

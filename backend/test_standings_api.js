@@ -34,6 +34,9 @@ const ContestFinalizationAudit = require("./models/ContestFinalizationAudit");
 const Submission = require("./models/Submission");
 const ContestService = require("./services/contest.service");
 const ScoringService = require("./services/scoring.service");
+const {
+  closeLeaderboardProjectionQueue,
+} = require("./queue/leaderboardProjectionQueue");
 const { assignCompetitionRanks, compareParticipantStandings, SUBMISSION_STATUS, JUDGE_VERDICTS } = require("@koder/shared");
 
 const DEFAULT_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/koder_standings_test";
@@ -811,6 +814,7 @@ async function runTests() {
       process.exitCode = 1;
     }
   } finally {
+    await closeLeaderboardProjectionQueue();
     if (server) {
       server.closeAllConnections?.();
       server.closeIdleConnections?.();

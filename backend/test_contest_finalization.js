@@ -28,6 +28,9 @@ const ContestFinalizationAudit = require("./models/ContestFinalizationAudit");
 const Submission = require("./models/Submission");
 const ContestService = require("./services/contest.service");
 const ScoringService = require("./services/scoring.service");
+const {
+  closeLeaderboardProjectionQueue,
+} = require("./queue/leaderboardProjectionQueue");
 const { updateSubmission } = require("@koder/shared");
 const { SUBMISSION_STATUS, JUDGE_VERDICTS } = require("@koder/shared");
 
@@ -939,6 +942,7 @@ async function runTests() {
       process.exitCode = 1;
     }
   } finally {
+    await closeLeaderboardProjectionQueue();
     if (mongoose.connection.readyState !== 0) {
       await mongoose.disconnect();
     }

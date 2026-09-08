@@ -16,6 +16,9 @@ const {
   reconcileContestScoring,
   reconcileParticipantScoring,
 } = require("./services/scoring-reconcile.service");
+const {
+  closeLeaderboardProjectionQueue,
+} = require("./queue/leaderboardProjectionQueue");
 const ScoringRepository = require("./repositories/scoring.repository");
 const SubmissionRepository = require("./repositories/submission.repository");
 const fs = require("fs");
@@ -834,6 +837,7 @@ run()
     process.exitCode = 1;
   })
   .finally(async () => {
+    await closeLeaderboardProjectionQueue();
     if (mongoose.connection.readyState !== 0) {
       await mongoose.disconnect();
     }

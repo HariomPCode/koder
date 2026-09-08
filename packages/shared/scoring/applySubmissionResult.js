@@ -361,10 +361,16 @@ async function applySubmissionResult(submissionId, options = {}) {
     });
   }
 
-  await reconcileParticipantAggregate({
+  const reconciledAggregate = await reconcileParticipantAggregate({
     contestId: submission.contestId,
     userId: submission.userId,
   });
+  const aggregateChanged =
+    reconciledAggregate &&
+    (reconciledAggregate.solvedCount !== (participant.solvedCount ?? 0) ||
+      reconciledAggregate.totalPenalty !== (participant.totalPenalty ?? 0) ||
+      reconciledAggregate.lastAcceptedContestMs !==
+        (participant.lastAcceptedContestMs ?? null));
 
   const effect = resolveLedgerEffect({
     submission,
@@ -380,6 +386,7 @@ async function applySubmissionResult(submissionId, options = {}) {
       effect,
       ledgerCreated: true,
       solveResult,
+      projectionRequired: Boolean(aggregateChanged),
     };
   }
 
@@ -390,6 +397,7 @@ async function applySubmissionResult(submissionId, options = {}) {
     effect,
     ledgerCreated: false,
     solveResult,
+    projectionRequired: Boolean(aggregateChanged),
   };
 }
 

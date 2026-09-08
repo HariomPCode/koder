@@ -13,6 +13,9 @@ const JOB_NAMES = Object.freeze({
   EXECUTE: "execute",
 });
 
+const LEADERBOARD_PROJECTION_QUEUE_NAME = "leaderboard-projection-queue";
+const LEADERBOARD_PROJECTION_JOB_NAME = "project-participant";
+
 const QUEUE_RETRY_DEFAULTS = Object.freeze({
   attempts: 3,
   backoff: {
@@ -131,6 +134,8 @@ function createQueueJobOptions(overrides = {}) {
 module.exports = {
   QUEUE_NAMES,
   JOB_NAMES,
+  LEADERBOARD_PROJECTION_QUEUE_NAME,
+  LEADERBOARD_PROJECTION_JOB_NAME,
   QUEUE_RETRY_DEFAULTS,
   QUEUE_RETENTION_DEFAULTS,
   QUEUE_STALL_DEFAULTS,

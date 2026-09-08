@@ -5,6 +5,7 @@ const verdicts = require("./contracts/verdicts");
 const scoring = require("./contracts/scoring");
 const protocol = require("./contracts/protocol");
 const leaderboardEncoding = require("./leaderboard/leaderboardEncoding");
+const projectionIntegration = require("./leaderboard/projectionIntegration");
 const templateGenerator = require("./engine/templateGenerator");
 const Question = require("./models/Question");
 const Submission = require("./models/Submission");
@@ -25,6 +26,7 @@ module.exports = {
   ...scoring,
   ...protocol,
   ...leaderboardEncoding,
+  ...projectionIntegration,
   ...templateGenerator,
   Question,
   Submission,

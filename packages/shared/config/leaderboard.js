@@ -1,6 +1,7 @@
 const {
   normalizeContestId,
   normalizeGeneration,
+  normalizeObjectId,
 } = require("../leaderboard/leaderboardEncoding");
 
 const LEADERBOARD_KEY_PREFIX = "koder:v1";
@@ -44,6 +45,13 @@ function buildLeaderboardActiveVersionKey(contestId) {
   return `${LEADERBOARD_KEY_PREFIX}:contest:${normalizeContestId(contestId)}:leaderboard:activeVersion`;
 }
 
+function buildLeaderboardProjectionPayload({ contestId, userId }) {
+  return {
+    contestId: normalizeContestId(contestId),
+    userId: normalizeObjectId(userId),
+  };
+}
+
 module.exports = {
   LEADERBOARD_KEY_PREFIX,
   LEADERBOARD_META_STATE,
@@ -53,4 +61,5 @@ module.exports = {
   buildLeaderboardMembersKey,
   buildLeaderboardMetaKey,
   buildLeaderboardActiveVersionKey,
+  buildLeaderboardProjectionPayload,
 };

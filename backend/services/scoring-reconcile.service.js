@@ -12,11 +12,25 @@ const {
   countWrongAttemptsBeforeSolve,
   calculateProblemPenalty,
 } = require("@koder/shared");
+const {
+  enqueueLeaderboardProjection,
+} = require("../queue/leaderboardProjectionQueue");
 
 const MUTABLE_CONTEST_STATUSES = new Set(["RUNNING", "ENDED"]);
 const AUDIT_ONLY_CONTEST_STATUS = "FINALIZED";
 const DEFAULT_BATCH_SIZE = 100;
 const DEFAULT_MAX_PASSES = 3;
+
+async function enqueueProjectionAfterRepair(contestId, userId) {
+  try {
+    await enqueueLeaderboardProjection({ contestId, userId });
+  } catch (error) {
+    console.error(
+      `Leaderboard projection enqueue failed after reconciliation for contest ${contestId}, user ${userId}:`,
+      error?.message || error,
+    );
+  }
+}
 
 async function resolveExcludedSubmissionIds(contest, options) {
   let excluded = Array.isArray(options.excludeSubmissionIds)
@@ -341,6 +355,7 @@ async function reconcileParticipantInternal({
     report.aggregateRepairs += 1;
     if (!options.dryRun) {
       await ScoringRepository.updateParticipantAggregate(contest._id, userId, aggregate);
+      await enqueueProjectionAfterRepair(contest._id, userId);
     }
   }
 }
