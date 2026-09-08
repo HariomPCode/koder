@@ -6,16 +6,18 @@ const {
   ContestLeaderboardSnapshot,
   ContestFinalizationAudit,
   assignCompetitionRanks,
-  compareParticipantStandings,
   SUPPORTED_LANGUAGES,
   normalizeLanguage,
   SUBMISSION_STATUS,
+  normalizeObjectId,
 } = require("@koder/shared");
 const ContestRepository = require("../repositories/contest.repository");
 const AppError = require("../errors/appError");
 const queue = require("../queue");
 const { validateSubmissionPayload } = require("../validators/request.validators");
 const ScoringReconcileService = require("./scoring-reconcile.service");
+const standingsService = require("./standings.service");
+const { formatStanding, paginationResult } = standingsService;
 
 const CONTEST_STATUS = Object.freeze({
   DRAFT: "DRAFT",
@@ -571,20 +573,31 @@ async function getContestStandings({ contestId, page = 1, limit = 50 }) {
     };
   }
 
-  // 2. NON-FINALIZED (RUNNING / ENDED): read from ContestParticipant aggregate
-  const total = await ContestRepository.countParticipants(currentContest._id);
-  if (total === 0) {
-    return {
-      contestId: currentContest._id,
-      status: currentContest.status,
-      standings: [],
-      pagination: {
+  // 2. NON-FINALIZED (RUNNING / ENDED): prefer Redis, then use Mongo authority.
+  if (normalizedStatus === CONTEST_STATUS.RUNNING || normalizedStatus === CONTEST_STATUS.ENDED) {
+    try {
+      return await standingsService.readRedisStandings({
+        contest: currentContest,
         page: parsedPage,
         limit: parsedLimit,
-        total: 0,
-        totalPages: 0,
-      },
-    };
+      });
+    } catch (error) {
+      console.warn(
+        `Redis standings read fallback for contest ${currentContest._id}:`,
+        error?.message || error,
+      );
+    }
+  }
+
+  const total = await ContestRepository.countParticipants(currentContest._id);
+  if (total === 0) {
+    return paginationResult({
+      contest: currentContest,
+      page: parsedPage,
+      limit: parsedLimit,
+      standings: [],
+      total: 0,
+    });
   }
 
   const participants = await ContestRepository.findParticipantsPaginated(
@@ -592,61 +605,21 @@ async function getContestStandings({ contestId, page = 1, limit = 50 }) {
     { skip, limit: parsedLimit },
   );
 
-  let prevEntry = null;
-  let prevRank = null;
-  if (skip > 0) {
-    prevEntry = await ContestRepository.findParticipantAtOffset(currentContest._id, skip - 1);
-    if (prevEntry) {
-      prevRank = (await ContestRepository.countParticipantsAhead(currentContest._id, prevEntry)) + 1;
-    }
-  }
-
   const rankedParticipants = [];
   for (let index = 0; index < participants.length; index += 1) {
     const entry = participants[index];
-    let rank;
-    if (index > 0) {
-      const prev = participants[index - 1];
-      if (compareParticipantStandings(entry, prev) === 0) {
-        rank = rankedParticipants[index - 1].rank;
-      } else {
-        rank = skip + index + 1;
-      }
-    } else if (prevEntry && compareParticipantStandings(entry, prevEntry) === 0) {
-      rank = prevRank;
-    } else {
-      rank = skip + 1;
-    }
-    rankedParticipants.push({ ...entry, rank });
+    rankedParticipants.push({ ...entry, rank: skip + index + 1 });
   }
 
-  const standings = rankedParticipants.map((p) => {
-    const lastAcceptedAt =
-      p.solvedCount > 0 && p.lastAcceptedContestMs != null
-        ? new Date(new Date(currentContest.startTime).getTime() + p.lastAcceptedContestMs)
-        : null;
-
-    return {
-      userId: p.userId,
-      rank: p.rank,
-      solvedCount: p.solvedCount || 0,
-      score: p.solvedCount || 0,
-      penalty: p.totalPenalty || 0,
-      ...(lastAcceptedAt ? { lastAcceptedAt } : {}),
-    };
+  return paginationResult({
+    contest: currentContest,
+    page: parsedPage,
+    limit: parsedLimit,
+    standings: rankedParticipants.map((participant) =>
+      formatStanding({ contest: currentContest, participant, rank: participant.rank }),
+    ),
+    total,
   });
-
-  return {
-    contestId: currentContest._id,
-    status: currentContest.status,
-    standings,
-    pagination: {
-      page: parsedPage,
-      limit: parsedLimit,
-      total,
-      totalPages: Math.ceil(total / parsedLimit) || 0,
-    },
-  };
 }
 
 async function getMyContestStanding({ contestId, userId }) {
@@ -702,31 +675,32 @@ async function getMyContestStanding({ contestId, userId }) {
     };
   }
 
-  // 2. NON-FINALIZED (RUNNING / ENDED): read from ContestParticipant
-  const participant = await ContestRepository.findParticipant(currentContest._id, userId);
-  if (!participant) {
-    throw AppError.notFound("Participant not registered for this contest");
+  // 2. NON-FINALIZED (RUNNING / ENDED): prefer Redis, then use Mongo authority.
+  let formattedStanding;
+  try {
+    formattedStanding = await standingsService.readRedisMyStanding({
+      contest: currentContest,
+      userId: normalizeObjectId(userId),
+    });
+  } catch (error) {
+    console.warn(
+      `Redis personal standings read fallback for contest ${currentContest._id}, user ${userId}:`,
+      error?.message || error,
+    );
+    const participant = await ContestRepository.findParticipant(currentContest._id, userId);
+    if (!participant) {
+      throw AppError.notFound("Participant not registered for this contest");
+    }
+    const aheadCount = await ContestRepository.countParticipantsAhead(
+      currentContest._id,
+      participant,
+    );
+    formattedStanding = formatStanding({
+      contest: currentContest,
+      participant,
+      rank: aheadCount + 1,
+    });
   }
-
-  const aheadCount = await ContestRepository.countParticipantsAhead(
-    currentContest._id,
-    participant,
-  );
-  const rank = aheadCount + 1;
-
-  const lastAcceptedAt =
-    participant.solvedCount > 0 && participant.lastAcceptedContestMs != null
-      ? new Date(new Date(currentContest.startTime).getTime() + participant.lastAcceptedContestMs)
-      : null;
-
-  const formattedStanding = {
-    userId: participant.userId,
-    rank,
-    solvedCount: participant.solvedCount || 0,
-    score: participant.solvedCount || 0,
-    penalty: participant.totalPenalty || 0,
-    ...(lastAcceptedAt ? { lastAcceptedAt } : {}),
-  };
 
   return {
     contestId: currentContest._id,

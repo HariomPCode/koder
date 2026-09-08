@@ -37,6 +37,7 @@ const ScoringService = require("./services/scoring.service");
 const {
   closeLeaderboardProjectionQueue,
 } = require("./queue/leaderboardProjectionQueue");
+const { closeRedis: closeStandingsRedis } = require("./services/standings.service");
 const { assignCompetitionRanks, compareParticipantStandings, SUBMISSION_STATUS, JUDGE_VERDICTS } = require("@koder/shared");
 
 const DEFAULT_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/koder_standings_test";
@@ -815,6 +816,7 @@ async function runTests() {
     }
   } finally {
     await closeLeaderboardProjectionQueue();
+    await closeStandingsRedis();
     if (server) {
       server.closeAllConnections?.();
       server.closeIdleConnections?.();
