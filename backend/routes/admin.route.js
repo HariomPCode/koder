@@ -8,10 +8,33 @@ const {
   generateStarterCode,
   SUPPORTED_LANGUAGES,
   isSupportedLanguage,
+  normalizeContestId,
 } = require("@koder/shared");
+const {
+  createLeaderboardProjectionService,
+} = require("../services/leaderboard-projection.service");
+const IoRedis = require("ioredis");
+const { getRedisConfig } = require("@koder/shared");
+const { Contest, ContestParticipant } = require("@koder/shared");
 
 
 const router = express.Router();
+let projectionRedis = null;
+let projectionService = null;
+
+function getProjectionService() {
+  if (!projectionRedis) {
+    projectionRedis = new IoRedis(getRedisConfig());
+  }
+  if (!projectionService) {
+    projectionService = createLeaderboardProjectionService({
+      ContestModel: Contest,
+      ParticipantModel: ContestParticipant,
+      redis: projectionRedis,
+    });
+  }
+  return projectionService;
+}
 
 router.use(authMiddleware);
 router.use(adminMiddleware);
@@ -320,6 +343,44 @@ router.post("/contests/:contestId/reconcile-scoring", async (req, res, next) => 
   } catch (error) {
     if (error && error.statusCode) {
       return res.status(error.statusCode).json({ message: error.message });
+    }
+    return next(error);
+  }
+});
+
+router.post("/contests/:contestId/leaderboard/rebuild", async (req, res, next) => {
+  try {
+    const contestId = normalizeContestId(req.params.contestId);
+    const result = await getProjectionService().rebuildContest(contestId, {
+      actorUserId: req.userId,
+      reason: req.body?.reason || "admin requested leaderboard rebuild",
+    });
+    if (result.status === "already_running") {
+      return res.status(409).json(result);
+    }
+    return res.status(202).json(result);
+  } catch (error) {
+    if (error && error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    if (error instanceof TypeError) {
+      return res.status(400).json({ message: error.message });
+    }
+    return next(error);
+  }
+});
+
+router.get("/contests/:contestId/leaderboard/health", async (req, res, next) => {
+  try {
+    const contestId = normalizeContestId(req.params.contestId);
+    const result = await getProjectionService().checkDrift(contestId);
+    return res.json(result);
+  } catch (error) {
+    if (error && error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    if (error instanceof TypeError) {
+      return res.status(400).json({ message: error.message });
     }
     return next(error);
   }

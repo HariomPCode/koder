@@ -160,6 +160,10 @@ async function runTests() {
     assert.deepStrictEqual(LEADERBOARD_METADATA_FIELDS, {
       STATE: "state",
       GENERATION: "generation",
+      REBUILD_ID: "rebuildId",
+      STARTED_AT: "startedAt",
+      FINISHED_AT: "finishedAt",
+      PARTICIPANT_COUNT: "participantCount",
       LAST_SUCCESSFUL_REFRESH_AT: "lastSuccessfulRefreshAt",
       LAST_REBUILD_ID: "lastRebuildId",
       HEALTH: "health",

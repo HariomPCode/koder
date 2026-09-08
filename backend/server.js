@@ -5,6 +5,7 @@ require("dotenv").config({
 
 const connectDB = require("./db");
 const createApp = require("./app");
+const { startLeaderboardProjectionSweep } = require("./jobs/leaderboardProjectionSweep");
 const app = createApp();
 
 async function startServer() {
@@ -13,6 +14,7 @@ async function startServer() {
   app.listen(5000, () => {
     console.log("Server is running on port 5000");
   });
+  startLeaderboardProjectionSweep();
 }
 
 if (require.main === module) {

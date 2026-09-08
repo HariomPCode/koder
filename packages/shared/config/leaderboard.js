@@ -19,6 +19,10 @@ const LEADERBOARD_HEALTH = Object.freeze({
 const LEADERBOARD_METADATA_FIELDS = Object.freeze({
   STATE: "state",
   GENERATION: "generation",
+  REBUILD_ID: "rebuildId",
+  STARTED_AT: "startedAt",
+  FINISHED_AT: "finishedAt",
+  PARTICIPANT_COUNT: "participantCount",
   LAST_SUCCESSFUL_REFRESH_AT: "lastSuccessfulRefreshAt",
   LAST_REBUILD_ID: "lastRebuildId",
   HEALTH: "health",
@@ -45,6 +49,14 @@ function buildLeaderboardActiveVersionKey(contestId) {
   return `${LEADERBOARD_KEY_PREFIX}:contest:${normalizeContestId(contestId)}:leaderboard:activeVersion`;
 }
 
+function buildLeaderboardRebuildLockKey(contestId) {
+  return `${LEADERBOARD_KEY_PREFIX}:contest:${normalizeContestId(contestId)}:leaderboard:rebuildLock`;
+}
+
+function buildLeaderboardSweepLockKey() {
+  return `${LEADERBOARD_KEY_PREFIX}:leaderboard:sweepLock`;
+}
+
 function buildLeaderboardProjectionPayload({ contestId, userId }) {
   return {
     contestId: normalizeContestId(contestId),
@@ -61,5 +73,7 @@ module.exports = {
   buildLeaderboardMembersKey,
   buildLeaderboardMetaKey,
   buildLeaderboardActiveVersionKey,
+  buildLeaderboardRebuildLockKey,
+  buildLeaderboardSweepLockKey,
   buildLeaderboardProjectionPayload,
 };
