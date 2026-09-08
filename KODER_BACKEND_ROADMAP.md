@@ -374,6 +374,15 @@ We do **not** add a `FAILED` status distinct from `COMPLETED`. Today's `workerFa
 
 ### 5.4 Leaderboard — what's persisted, what's cached, what's computed live
 
+> **Phase 7 correction / supersession:** The historical design below is retained
+> for context only and is not an implementation requirement. It is superseded by
+> `PHASE_7_REDIS_LEADERBOARD.md`: MongoDB `ContestParticipant` is authoritative;
+> Redis is a versioned, rebuildable projection; Redis solved sets, wrong-attempt
+> counters, Redis-side scoring, and submission replay rebuilds are prohibited.
+> `RUNNING`/`ENDED` reads may use Redis with bounded Mongo fallback, while
+> `FINALIZED` reads remain snapshot-only. Do not implement the operations or key
+> names described in the historical text below.
+
 **Persisted in MongoDB:** every individual `Submission` (already true today) and periodic `ContestLeaderboardSnapshot`s (5.2) plus the final snapshot at finalization.
 
 **Live/authoritative-for-ranking data lives in Redis**, specifically as **Redis sorted sets**, one per contest:
@@ -424,7 +433,10 @@ No changes needed to this shape for practice mode. The `getQuestionDetails` doub
 
 **Contest, 10,000 users — write hotspots:**
 1. `Submission.create` — one write per submission, indexed on `contestId` for later scoring queries. This is the dominant Mongo write path; quantified in Section 8.
-2. Redis `ZADD` on the leaderboard — one write per **accepted** submission that is a first-solve (not one per submission), because non-solving submissions only touch the per-user wrongcount key, not the shared ZSET. This is a deliberate design choice to keep the single most-contended key (the leaderboard ZSET) from being written on every submission — only on rank-changing events.
+2. Redis projection refresh — one asynchronous participant refresh when
+   authoritative Mongo scoring changes (first solve, canonical AC correction, or
+   aggregate repair), not on every submission and not for a wrong attempt that
+   leaves `ContestParticipant` unchanged.
 3. `contest:{contestId}:user:{userId}:wrongcount:*` — per-user keys, no cross-user contention, safe to write at full submission rate.
 
 **Contest, 10,000 users — read hotspots:**
@@ -447,8 +459,8 @@ No changes needed to this shape for practice mode. The `getQuestionDetails` doub
 | Submission | Practice submission intake + status read | `/api/v1/submissions/*` (existing, extended for contest awareness) | Submission | `submission.created`, `submission.queued`, `submission.running`, `submission.completed` (NEW — Phase 7) | — | Queue |
 | Judge (workers) | Sandbox execution — **unchanged code**, extended config only (concurrency, retries) | none (not HTTP) | Submission, Question (read) | `submission.completed` | job payload | Queue, Docker |
 | Contest | Lifecycle, registration, contest-scoped submission intake | `/api/v1/contests/*` (NEW) | Contest, ContestParticipant | `contest.started`, `contest.ended` (NEW) | `submission.completed` (to trigger scoring) | Submission, Scoring |
-| Scoring | Consumes completed contest submissions, updates penalty/solved state, writes leaderboard ZSET | none (not HTTP — internal consumer) | Submission (read), Redis (write) | `leaderboard.updated`, `rank.updated` (NEW) | `submission.completed` | Contest, Redis |
-| Leaderboard (read) | Serves top-N / user-rank / nearby reads from Redis | `/api/v1/contests/:id/leaderboard*` (NEW) | none (Redis only) | — | — | Redis |
+| Scoring | Applies authoritative contest scoring in MongoDB; optionally triggers projection delivery after success | none (not HTTP — internal service) | Submission, ContestScoredSubmission, ContestParticipant, ContestParticipantProblem | projection refresh request (Phase 7) | terminal scoring result | Contest, MongoDB |
+| Leaderboard projection/read | Projects current `ContestParticipant` aggregates to Redis and serves live reads with Mongo fallback | existing `/api/v1/contests/:id/standings*` | ContestParticipant, ContestLeaderboardSnapshot | — | identifier-only projection jobs | Redis, MongoDB |
 | Events (SSE) | Fan-out of submission and leaderboard events to connected clients | `/api/v1/events/*` (NEW, SSE) | none | — | all of the above, via Redis pub/sub | Redis pub/sub |
 | Admin | Question + user administration, **contest administration (NEW)** | `/admin/*` (existing + extended) | all | contest lifecycle events on manual override | — | Contest |
 
@@ -503,15 +515,12 @@ POST   /api/v1/contests/:contestId/submissions/:contestProblemId
   Rate limit: per-user, per-contest — tighter than practice submissions (this is the endpoint a malicious/careless client could hammer during a live contest)
   Events emitted: submission.created
 
-GET    /api/v1/contests/:contestId/leaderboard
-  Auth: none (public) or required, depending on contest visibility settings — UNKNOWN, default to public since this is a LeetCode-contest-style product; flagged for product decision (ISSUE-122)
-  DB ops: NONE during a running contest — served entirely from Redis ZREVRANGE (5.4)
-  Cache: this endpoint IS the cache; no additional layer needed
-  Fallback: if contest.status is ENDED/FINALIZED, serve from ContestLeaderboardSnapshot{isFinal:true} instead of Redis (Redis key may have expired per the 7-day TTL in 5.4)
-
-GET    /api/v1/contests/:contestId/leaderboard/me
-  Auth: required
-  DB ops: none — ZREVRANK + a small ZREVRANGE window around the user's rank
+GET    /api/v1/contests/:contestId/standings
+GET    /api/v1/contests/:contestId/standings/me
+  Existing API surface; do not add a replacement `/leaderboard` route.
+  RUNNING/ENDED: use the healthy Redis projection when ready, with bounded
+  timeout and Mongo fallback preserving global ordinal ranks.
+  FINALIZED: read `ContestLeaderboardSnapshot` exclusively; never consult Redis.
 
 GET    /api/v1/events?contestId=...   (SSE)
   Auth: required
@@ -607,28 +616,38 @@ Transitions are driven by a scheduled backend process (ISSUE-125, P0) comparing 
 
 - `DRAFT → SCHEDULED`: manual admin action (publishing a contest) — not time-driven.
 - `SCHEDULED → REGISTRATION`: automatic when `now >= registrationOpenTime`.
-- `REGISTRATION → RUNNING`: automatic when `now >= startTime`. On this transition, the scheduler also initializes the Redis leaderboard structures (5.4) for all registered participants (pre-seeding scores at 0 so early leaderboard reads before anyone's solved anything return a complete, correctly-ranked-by-registration-time-tiebreak list rather than an empty set — UNKNOWN whether pre-seeding is wanted vs. a truly empty board; default to pre-seeding since it's more predictable, flagged ISSUE-126).
+- `REGISTRATION → RUNNING`: automatic when `now >= startTime`. Optional Redis
+  participant pre-seeding is a Phase 7 product/deployment decision (provisional
+  `ISSUE-705`); it is not required for Mongo scoring or finalization.
 - `RUNNING → ENDED`: automatic when `now >= endTime`. Submissions after this point are rejected at the API layer (Section 7).
 - `ENDED → FINALIZED`: **not automatic** — deliberately a manual/reviewed admin action, because finalization is what triggers the permanent `ContestLeaderboardSnapshot{isFinal:true}` and (per Section 5.1's rating field) any rating recalculation; an admin should be able to review standings before locking them in, especially since disqualifications/manual corrections most plausibly happen in the `ENDED`-but-not-yet-`FINALIZED` window. This is a product decision inferred from standard contest-platform practice, not from anything in the repo — flagged as a default, not a hard requirement.
 
 ### Scoring
 
-ICPC-style (solved count primary, penalty time tiebreak) — **decided in Phase 6 review** (`PHASE_6_SCORING_ENGINE.md`). MongoDB authoritative scoring uses ACM/ICPC penalty semantics; `Contest.problems[].points` is retained but not used for Phase 6 ranking. Phase 7 Redis ZSET composite score formula remains derived from the same solved-count + penalty sort key.
+ICPC-style (solved count primary, penalty time tiebreak) — **decided in Phase 6 review** (`PHASE_6_SCORING_ENGINE.md`). MongoDB authoritative scoring uses ACM/ICPC penalty semantics; `Contest.problems[].points` is retained but not used for Phase 6 ranking. Phase 7 Redis is only a projection of `ContestParticipant`; it must preserve `solvedCount DESC`, `totalPenalty ASC`, `lastAcceptedContestMs ASC`, and `userId ASC` without introducing a second scoring model.
 
 ## 13. Redis Architecture (consolidated reference)
 
 | Key pattern | Type | Purpose | Written by | Read by | TTL |
 |---|---|---|---|---|---|
 | `js-queue`/`java-queue`/`python-queue` (BullMQ-managed) | list/hash/zset (BullMQ internals) | job queue | API (add), Worker (consume) | Worker | per `removeOnComplete`/`removeOnFail` (Section 9) |
-| `contest:{id}:leaderboard` | ZSET | live ranking | Scoring consumer | Leaderboard API | 7d after contest ENDED (5.4) |
-| `contest:{id}:user:{uid}:solved` | SET | idempotent solved-tracking | Scoring consumer | Scoring consumer | same as leaderboard key |
-| `contest:{id}:user:{uid}:wrongcount:{cpid}` | STRING (int) | penalty tracking | Scoring consumer | Scoring consumer | same as leaderboard key |
+| `koder:v1:contest:{id}:leaderboard:{generation}` | ZSET | derived live ranking projection | Projection producer/worker | Existing `/standings` API | retention unresolved |
+| `koder:v1:contest:{id}:leaderboard:{generation}:members` | HASH | `userId -> current member token` | Projection producer/worker | Projection service | same as projection |
+| `koder:v1:contest:{id}:leaderboard:{generation}:meta` | HASH | ready/rebuilding state, generation, refresh/rebuild/error metadata | Projection service | Projection service/API | same as projection |
+| `koder:v1:contest:{id}:leaderboard:activeVersion` | STRING | atomic active-generation pointer | Rebuild service | Projection service/API | same as projection |
 | `contest:{id}:meta` | HASH | denormalized contest metadata cache | API (populate on read, invalidate on admin write) | API | short TTL + explicit invalidation |
 | `idempotency:submission:{hash}` | STRING | duplicate-submission guard (Section 9) | Submission API | Submission API | 60s |
 | SSE event stream(s) (Phase 7) | Redis Stream | event fan-out for reconnect/replay | API instances (producers), Contest/Scoring consumers (producers) | API instances (SSE consumers) | capped length (`XTRIM`), not time-based |
 | rate-limit counters (Phase 9) | STRING (INCR + EXPIRE) | per-user/per-IP throttling | rate-limit middleware | rate-limit middleware | sliding window (e.g. 60s) |
 
-Consistency model: Redis is **cache/derived-state** everywhere in this table except the queue itself (which is BullMQ's authoritative in-flight job state, already the existing design) and the SSE stream (which is a transient delivery mechanism, not a record of truth — the underlying `submission.completed`/`leaderboard.updated` facts are always independently derivable from MongoDB). If Redis is flushed entirely during a running contest, the system's designed recovery path is: leaderboard ZSETs are rebuildable from the `Submission` collection (query all `contestId`-matching, `verdict: Accepted` submissions, replay in `createdAt` order) — this rebuild procedure is specified as an operational runbook (ISSUE-121) rather than an automatic mechanism, since a full Redis flush mid-contest is a rare disaster scenario, not a steady-state failure mode to engineer away silently.
+Consistency model: Redis is a **rebuildable read projection**. MongoDB
+`ContestParticipant` remains the live authoritative aggregate, while
+`ContestLeaderboardSnapshot` remains the finalized authoritative read. Redis must
+not perform scoring, maintain solved sets, count wrong attempts, or replay
+submissions as the normal leaderboard rebuild path. A Redis flush is recovered by
+streaming current `ContestParticipant` aggregates into a versioned generation and
+atomically publishing the active-version pointer. If Mongo scoring state is suspect,
+run the existing Phase 6 reconciliation first.
 
 ## 14. Real-Time Event Architecture
 
@@ -655,7 +674,9 @@ Reasoning: every real-time need identified (submission status transitions, leade
 - **Producer → transport bridge:** all events are published to Redis Streams (Section 13), **not** plain Redis pub/sub, specifically because pub/sub has no replay/history — a client that reconnects mid-contest after a network blip would silently miss every event published during the gap. Redis Streams (`XADD`, consumed via `XREAD ... $LASTID`) let a reconnecting `EventSource` (which automatically sends `Last-Event-ID`) resume exactly where it left off.
 - **Per-contest stream, not global:** `stream:contest:{contestId}:events` — each API instance holding open SSE connections for that contest runs one `XREAD` loop and fans out to its locally-held connections; this bounds per-instance Redis read load to "number of distinct contests this instance has active viewers for," not "number of connections."
 - **Ordering:** guaranteed per-stream by Redis Streams' monotonic IDs — no additional ordering logic needed.
-- **Duplicate events:** the Scoring consumer's idempotent `SADD`-guarded update (5.4) means a duplicate `submission.completed` delivery produces at most one real leaderboard change; the SSE fan-out itself is at-least-once, and clients are expected to treat `leaderboard.updated` as a cue to re-fetch rather than as the authoritative delta, which makes duplicate delivery harmless by construction (this is why the payload is intentionally light — see table above).
+- **Duplicate projection jobs:** identifier-only jobs reread
+  `ContestParticipant`, so duplicate or out-of-order delivery converges to the
+  latest authoritative Mongo state and cannot double-count scoring.
 - **Scaling connections:** stateless API instances behind a load balancer; each instance holds a subset of the total SSE connections. At 10,000 concurrent contest viewers, if evenly distributed across (per Section 15's sizing) roughly 4–6 API instances, that's on the order of 2,000 long-lived connections per instance — well within a single Node process's socket capacity, but does require the LB to support long-lived HTTP connections without an aggressive idle timeout (an infra config note, ISSUE-128).
 
 ## 15. Scalability Model (quantified)
@@ -774,7 +795,7 @@ Simulated per scenario: contest registration burst (all target users registering
 
 Measured: p50/p95/p99 for API latency and for judge job wait time and judge execution time separately (these are different things and both matter — a fast API that queues a submission behind a deep queue still feels slow to the user), overall throughput, error rate, MongoDB and Redis load (ops/sec, connection pool saturation), CPU/memory on API and worker hosts, worker utilization (active containers vs. configured concurrency).
 
-**Acceptable thresholds (proposed defaults, tune per real infra):** p95 API latency (non-judge endpoints) < 300ms at all four scenarios; p95 job wait time (enqueue → RUNNING) < 10s at Scenario 4 peak burst (this is the number most sensitive to worker fleet sizing from Section 15 and the one most worth alerting on); error rate < 0.1% excluding intentionally-rejected (429/403) requests; zero leaderboard rank inconsistencies (validated by comparing the live Redis-served leaderboard against a from-scratch Mongo recomputation at test end — see Section 21).
+**Acceptable thresholds (proposed defaults, tune per real infra):** p95 API latency (non-judge endpoints) < 300ms at all four scenarios; p95 job wait time (enqueue → RUNNING) < 10s at Scenario 4 peak burst (this is the number most sensitive to worker fleet sizing from Section 15 and the one most worth alerting on); error rate < 0.1% excluding intentionally-rejected (429/403) requests; zero leaderboard rank inconsistencies (validated by comparing Redis-served standings with an independent ordering of authoritative `ContestParticipant` aggregates at test end — see Section 21).
 
 Tooling: **UNKNOWN — REQUIRES DECISION.** No load-testing tool is currently present in the repo (confirmed — no `k6`, `artillery`, or similar config found). A tool needs to support both plain HTTP burst load (submissions, registration) and long-lived SSE connections (most HTTP load tools handle SSE poorly) — k6 (with its experimental SSE support) or a custom Node-based harness using `EventSource` clients are both plausible; this decision should be made in Phase 8 planning, not pre-committed here (ISSUE-134).
 
@@ -786,9 +807,9 @@ Before frontend work (Phase 10) begins:
 
 **Concurrent submissions:** multiple submissions execute safely at the tuned `WORKER_CONCURRENCY` without cross-submission sandbox collisions (already guarded by the existing `${language}-${jobId}` namespacing plus the attempt-number addition in Section 9); queue remains stable under the Scenario 4 load test (Section 20).
 
-**Contest:** users can register (unique-index-guarded, Section 7); contest starts and stops on backend clock, not client (Section 12); submissions are accepted only within the RUNNING window; scoring is correct (verified by comparing Redis-served standings against an independent from-scratch recomputation from the `Submission` collection — this comparison IS the acceptance test for the entire scoring design, not just a nice-to-have); penalties compute correctly per the chosen formula (Section 12/5.4); leaderboard updates correctly and only on rank-changing events (verified by asserting `ZADD` call count equals accepted-first-solve count, not total submission count, during the load test).
+**Contest:** users can register (unique-index-guarded, Section 7); contest starts and stops on backend clock, not client (Section 12); submissions are accepted only within the RUNNING window; Mongo scoring is correct per Phase 6; Redis-served standings match an independent ordering of authoritative `ContestParticipant` aggregates; penalties compute correctly in Phase 6; projection refreshes occur only when the participant aggregate may change, not on every wrong attempt.
 
-**Real-time:** users receive `submission.completed` and `leaderboard.updated` events within a bounded latency (measured in Section 20); reconnect resumes from `Last-Event-ID` without gaps (explicit disconnect/reconnect test); duplicate event delivery doesn't corrupt state (verified via the idempotent-`SADD` design — assert a manually-duplicated event doesn't change the score a second time).
+**Real-time:** Phase 8 SSE is out of scope for this Phase 7 review. Phase 7 validates projection convergence and read fallback independently of event-stream delivery.
 
 **Failure recovery:** each row of Section 19's table has a corresponding chaos test (kill a worker process mid-job; kill the Docker daemon; drop the Mongo connection; drop the Redis connection; kill and restart an API instance) with the documented recovery behavior asserted, not just hoped for.
 
@@ -1080,54 +1101,35 @@ Grouped by phase. Each issue lists only the sections genuinely relevant to it, p
 
 ---
 
-### ISSUE-119 — Scoring model decision + Scoring consumer implementation
+### ISSUE-119 — Legacy Redis scoring design (superseded by Phase 6/7)
 
-**Priority:** P0 (the consumer is on the critical path; the ICPC-vs-points decision should be made before this starts)
-**Objective:** Implement the Scoring module (Section 6) that consumes `submission.completed` events for contest submissions and updates Redis per Section 5.4.
-**Why This Is Needed:** this is the mechanism that satisfies "do NOT recalculate the entire leaderboard from MongoDB after every submission" — it's the core of Phase 6.
-**Current Implementation:** none.
-**Proposed Change:** as specified in Section 5.4 — idempotent `SADD`-guarded solved-check, `INCR` wrongcount, single `ZADD` per rank-changing event.
-**Files/Modules Affected:** new `backend/consumers/scoringConsumer.js` (or a worker-side consumer, depending on deployment topology decision — either is architecturally valid since it only needs Redis Stream read access and Mongo read access, not Docker; recommend running it as its own lightweight process rather than folding into the API or judge workers, to scale/restart independently)
-**Redis Changes:** as specified in Section 5.4/13.
-**Event Changes:** consumes `submission.completed`; emits `leaderboard.updated`/`rank.updated`
-**Security Considerations:** must not trust client-supplied data — reads the authoritative `Submission` document, not the event payload, for anything score-affecting.
-**Failure Handling:** must be safe to restart and resume (Redis Streams consumer groups, not plain pub/sub — Section 14) without double-counting; the `SADD`-based idempotency guard is the core safety mechanism.
-**Testing Requirements:** exactly the acceptance-criteria comparison described in Section 21 ("Redis-served standings match independent from-scratch Mongo recomputation"); duplicate-event-delivery test.
-**Dependencies:** ISSUE-116, ISSUE-106, scoring-model decision (this issue, resolved before implementation starts)
-**Blocks:** ISSUE-120 (leaderboard read API), all of Phase 6
-**Acceptance Criteria:** Section 21's scoring-correctness comparison test passes under load (Section 20's Scenario 4).
+**Status:** Superseded. Do not implement.
+
+Phase 6 already established MongoDB as the scoring authority. Phase 7 must not
+implement a Redis scoring consumer, Redis-side `SADD` solved tracking, Redis
+wrong-attempt counters, or submission replay as the normal leaderboard rebuild.
+Use the provisional Phase 7 projection breakdown in `PHASE_7_REDIS_LEADERBOARD.md`
+instead.
 
 ---
 
-### ISSUE-120 — Leaderboard read API
+### ISSUE-120 — Legacy leaderboard read API (superseded)
 
-**Priority:** P0
-**Objective:** Implement `GET /api/v1/contests/:id/leaderboard` and `/leaderboard/me` per Section 7.
-**Why This Is Needed:** the read side of the leaderboard, serving from Redis with the Mongo-snapshot fallback for ended contests.
-**Current Implementation:** none.
-**Proposed Change:** as specified in Section 7/5.4.
-**Files/Modules Affected:** new `backend/routes/contest.route.js` (or split into `contest.route.js` + `leaderboard.route.js`)
-**API Changes:** as specified in Section 7.
-**Database Changes:** none beyond ISSUE-116's models.
-**Testing Requirements:** correctness against the Section 21 comparison test; fallback-to-snapshot test for `FINALIZED` contests after the live Redis key's TTL has notionally expired.
-**Dependencies:** ISSUE-119
-**Acceptance Criteria:** top-N, single-user-rank, and nearby-users queries all return correct results with no Mongo read on the running-contest path.
+**Status:** Superseded. Do not create new `/leaderboard` routes.
+
+Adapt the existing `/api/v1/contests/:contestId/standings` and
+`/standings/me` endpoints only after the projection is proven equivalent to Mongo.
+`RUNNING`/`ENDED` may use Redis with Mongo fallback; `FINALIZED` remains snapshot-only.
 
 ---
 
-### ISSUE-121 — Periodic leaderboard snapshotting + finalization + rebuild runbook
+### ISSUE-121 — Legacy snapshot/finalization design (superseded)
 
-**Priority:** P1
-**Objective:** Implement `ContestLeaderboardSnapshot` writes (periodic + final) and document the Redis-flush rebuild procedure from Section 13.
-**Why This Is Needed:** durability backstop for the Redis-primary leaderboard design.
-**Current Implementation:** none.
-**Proposed Change:** scheduled snapshot writer (configurable interval, default 30s) while any contest is `RUNNING`; a finalization handler on the (manual, per Section 12) `ENDED→FINALIZED` admin action that writes the final snapshot and sets the Redis key's TTL.
-**Files/Modules Affected:** new `backend/jobs/leaderboardSnapshot.js`; `admin.route.js` extension for the finalize action
-**Database Changes:** writes to `ContestLeaderboardSnapshot` (ISSUE-116)
-**Redis Changes:** sets TTL on the live leaderboard key at finalization (Section 5.4)
-**Testing Requirements:** snapshot content matches live Redis state at time of write; finalization is idempotent (re-running it doesn't produce a second `isFinal:true` document — enforce via the `{contestId:1, isFinal:1}` index plus an application-level check)
-**Dependencies:** ISSUE-119, ISSUE-116
-**Acceptance Criteria:** a full Redis flush mid-contest is recoverable per the documented runbook, validated by an actual disaster-recovery drill in staging.
+**Status:** Superseded. Final snapshot creation and finalization correctness are
+already owned by Phase 6 (`ISSUE-607`).
+
+Phase 7 may separately decide ended-contest retention or optional finalized-key
+cleanup, but Redis must never block finalization or replace the Mongo snapshot.
 
 ---
 
@@ -1411,7 +1413,11 @@ The backend phase (Sections 1–21 of this document) is considered done when:
 
 1. All P0 and P1 issues in Section 23 are implemented and individually tested per their own acceptance criteria.
 2. The full Section 20 load test suite (Scenarios 1–4) passes against the thresholds proposed in Section 20 (or against thresholds explicitly revised and re-approved during Phase 8 planning).
-3. The Section 21 backend verification checklist passes in full, including the scoring-correctness comparison test (Redis-served leaderboard matches an independent from-scratch Mongo recomputation) and the chaos-test suite covering every row of Section 19's failure-recovery table.
+3. The Section 21 backend verification checklist passes in full, including the
+   scoring-correctness comparison test (Redis-served leaderboard matches an
+   independent ordering of authoritative `ContestParticipant` aggregates) and
+   the Phase 7 recovery tests for projection failure, rebuild, fallback, and
+   finalized snapshot isolation.
 4. No leaderboard inconsistency, data corruption, or unbounded resource growth (Redis memory, orphaned containers, stuck submissions) is observed during or after the 10,000-user load test scenario.
 5. Metrics (ISSUE-132) and health checks (ISSUE-133) are live in the target deployment environment, providing the operational visibility needed to run a real contest with confidence.
 6. This document's `UNKNOWN — REQUIRES DECISION` items relevant to the P0/P1 critical path (scoring model, leaderboard visibility, pre-seeding) have been resolved and the corresponding issues updated to reflect the actual decision made, not left as placeholders.
