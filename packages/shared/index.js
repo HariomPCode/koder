@@ -1,8 +1,10 @@
 const languages = require("./config/languages");
 const queues = require("./config/queues");
+const leaderboardConfig = require("./config/leaderboard");
 const verdicts = require("./contracts/verdicts");
 const scoring = require("./contracts/scoring");
 const protocol = require("./contracts/protocol");
+const leaderboardEncoding = require("./leaderboard/leaderboardEncoding");
 const templateGenerator = require("./engine/templateGenerator");
 const Question = require("./models/Question");
 const Submission = require("./models/Submission");
@@ -18,9 +20,11 @@ const scoringProcessor = require("./scoring/applySubmissionResult");
 module.exports = {
   ...languages,
   ...queues,
+  ...leaderboardConfig,
   ...verdicts,
   ...scoring,
   ...protocol,
+  ...leaderboardEncoding,
   ...templateGenerator,
   Question,
   Submission,
