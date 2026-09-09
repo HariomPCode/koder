@@ -54,6 +54,7 @@ function createLeaderboardProjectionService({
   now = () => Date.now(),
   uuid = crypto.randomUUID,
   batchSize = DEFAULT_BATCH_SIZE,
+  shouldRebuildMissing = () => true,
 } = {}) {
   if (!redis) {
     throw new TypeError("redis connection is required");
@@ -239,6 +240,9 @@ function createLeaderboardProjectionService({
     }
     const generation = await redis.get(buildLeaderboardActiveVersionKey(normalizedContestId));
     if (!generation) {
+      if (!(await shouldRebuildMissing(contest))) {
+        return { contestId: normalizedContestId, enqueued: 0, skipped: "rebuild_not_due" };
+      }
       return { ...(await rebuildContest(normalizedContestId)), enqueued: 0, rebuilt: true };
     }
     const meta = await redis.hgetall(buildLeaderboardMetaKey(normalizedContestId, generation));

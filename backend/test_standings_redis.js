@@ -268,10 +268,9 @@ run()
     process.exitCode = 1;
   })
   .finally(async () => {
-    await Promise.all([
-      queue.jsQueue.close(),
-      queue.javaQueue.close(),
-      queue.pythonQueue.close(),
-    ]);
+    await queue.jsQueue.close();
+    await queue.javaQueue.close();
+    await queue.pythonQueue.close();
     await queue.connection.quit();
+    await standingsService.closeRedis();
   });

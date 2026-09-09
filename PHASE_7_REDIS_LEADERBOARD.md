@@ -622,7 +622,44 @@ planning breakdown only.
 7. **Operational endpoint shape:** separate admin leaderboard route versus extension
    of `backend/routes/admin.route.js`.
 
-## 11. Validation record
+## 11. Retention and optional seeding policy
+
+ISSUE-705 treats participant pre-seeding and Redis key cleanup as operational
+features only. MongoDB aggregates and `ContestLeaderboardSnapshot` remain the
+authoritative sources.
+
+- Pre-seeding is disabled by default. When enabled, it may populate a live
+  contest by invoking the existing ISSUE-703 versioned rebuild; it never mutates
+  `ContestParticipant`, creates scoring events, or becomes necessary for
+  `FINALIZED` reads.
+- ENDED projections use a configurable retention window. The default is 24 hours
+  (`KODER_LEADERBOARD_ENDED_RETENTION_MS`). After expiry, complete Redis
+  generations and the active pointer may be removed. Standings then use the
+  existing Mongo fallback and can be rebuilt operationally.
+- Finalized Redis cleanup is disabled by default. It is controlled by
+  `KODER_LEADERBOARD_FINALIZED_CLEANUP_ENABLED` and an optional grace period
+  (`KODER_LEADERBOARD_FINALIZED_CLEANUP_GRACE_MS`, default seven days).
+  Cleanup is never part of finalization and cannot delete the immutable
+  `ContestLeaderboardSnapshot`.
+- Cleanup uses the existing per-contest rebuild lock, scans only the
+  `koder:v1` generation namespace, skips incomplete/ambiguous generations, and
+  is safe to retry. Redis failures are logged and do not affect scoring,
+  reconciliation, or finalization.
+- The startup/periodic ISSUE-703 sweep performs bounded retention cleanup. Admins
+  may also use the protected rebuild, pre-seed, and cleanup operations under
+  `/admin/contests/:contestId/leaderboard/*`.
+
+Configuration is operational and can be changed without changing scoring or
+ranking semantics:
+
+```text
+KODER_LEADERBOARD_PRESEED_ENABLED=false
+KODER_LEADERBOARD_ENDED_RETENTION_MS=86400000
+KODER_LEADERBOARD_FINALIZED_CLEANUP_ENABLED=false
+KODER_LEADERBOARD_FINALIZED_CLEANUP_GRACE_MS=604800000
+```
+
+## 12. Validation record
 
 - **Git status:** inspected read-only at review start; no Git write command was run.
 - **HEAD:** `7b833716803dc62484cad712d84fcc1d5288ea8a`

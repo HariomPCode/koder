@@ -2,6 +2,7 @@ const IoRedis = require("ioredis");
 const {
   Contest,
   getRedisConfig,
+  getLeaderboardOperationalConfig,
 } = require("@koder/shared");
 const {
   enqueueLeaderboardProjection,
@@ -12,6 +13,9 @@ const {
 const {
   createLeaderboardProjectionService,
 } = require("../services/leaderboard-projection.service");
+const {
+  createLeaderboardRetentionService,
+} = require("../services/leaderboard-retention.service");
 
 const SWEEP_INTERVAL_MS = 60 * 1000;
 const SWEEP_LOCK_TTL_MS = 55 * 1000;
@@ -50,12 +54,34 @@ function createSweepRunner({
 
 function createDefaultSweepRunner() {
   const redis = new IoRedis(getRedisConfig());
+  const config = getLeaderboardOperationalConfig();
+  const retention = createLeaderboardRetentionService({ redis, config });
   const service = createLeaderboardProjectionService({
     ContestModel: Contest,
     redis,
     enqueueProjection: enqueueLeaderboardProjection,
+    shouldRebuildMissing: async (contest) =>
+      String(contest.status) !== "ENDED" ||
+      config.endedRetentionMs === 0 ||
+      Date.now() < new Date(contest.endTime).getTime() + config.endedRetentionMs,
   });
-  return { redis, runSweep: createSweepRunner({ redis, service }) };
+  const runSweep = createSweepRunner({ redis, service });
+  const originalRunSweep = runSweep;
+  return {
+    redis,
+    runSweep: async (options) => {
+      const projectionResult = await originalRunSweep(options);
+      let retentionResult = [];
+      try {
+        retentionResult = await retention.cleanupDueContests(options);
+      } catch (error) {
+        console.error("Leaderboard retention cleanup failed:", error.message || error);
+      }
+      return { ...projectionResult, retention: retentionResult };
+    },
+    retention,
+    service,
+  };
 }
 
 function startLeaderboardProjectionSweep({

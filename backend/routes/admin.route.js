@@ -16,11 +16,15 @@ const {
 const IoRedis = require("ioredis");
 const { getRedisConfig } = require("@koder/shared");
 const { Contest, ContestParticipant } = require("@koder/shared");
+const {
+  createLeaderboardRetentionService,
+} = require("../services/leaderboard-retention.service");
 
 
 const router = express.Router();
 let projectionRedis = null;
 let projectionService = null;
+let retentionService = null;
 
 function getProjectionService() {
   if (!projectionRedis) {
@@ -34,6 +38,18 @@ function getProjectionService() {
     });
   }
   return projectionService;
+}
+
+function getRetentionService() {
+  getProjectionService();
+  if (!retentionService) {
+    retentionService = createLeaderboardRetentionService({
+      ContestModel: Contest,
+      redis: projectionRedis,
+      projectionService,
+    });
+  }
+  return retentionService;
 }
 
 router.use(authMiddleware);
@@ -382,6 +398,36 @@ router.get("/contests/:contestId/leaderboard/health", async (req, res, next) => 
     if (error instanceof TypeError) {
       return res.status(400).json({ message: error.message });
     }
+    return next(error);
+  }
+});
+
+router.post("/contests/:contestId/leaderboard/preseed", async (req, res, next) => {
+  try {
+    const result = await getRetentionService().preseedContest(req.params.contestId, {
+      force: req.body?.force === true,
+      actorUserId: req.userId,
+      reason: req.body?.reason || "admin requested participant pre-seed",
+    });
+    return res.status(result.status === "disabled" ? 409 : 202).json(result);
+  } catch (error) {
+    if (error && error.statusCode) return res.status(error.statusCode).json({ message: error.message });
+    if (error instanceof TypeError) return res.status(400).json({ message: error.message });
+    return next(error);
+  }
+});
+
+router.post("/contests/:contestId/leaderboard/cleanup", async (req, res, next) => {
+  try {
+    const result = await getRetentionService().cleanupContest(req.params.contestId, {
+      force: req.body?.force === true,
+      reason: req.body?.reason || "admin requested leaderboard cleanup",
+    });
+    if (result.status === "already_running") return res.status(409).json(result);
+    return res.status(202).json(result);
+  } catch (error) {
+    if (error && error.statusCode) return res.status(error.statusCode).json({ message: error.message });
+    if (error instanceof TypeError) return res.status(400).json({ message: error.message });
     return next(error);
   }
 });

@@ -29,6 +29,41 @@ const LEADERBOARD_METADATA_FIELDS = Object.freeze({
   ERROR: "error",
 });
 
+const LEADERBOARD_OPERATIONAL_DEFAULTS = Object.freeze({
+  preseedEnabled: false,
+  endedRetentionMs: 24 * 60 * 60 * 1000,
+  finalizedCleanupEnabled: false,
+  finalizedCleanupGraceMs: 7 * 24 * 60 * 60 * 1000,
+  cleanupContestBatchSize: 25,
+  cleanupKeyScanCount: 100,
+});
+
+function parseNonNegativeInt(value, fallback) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function parsePositiveInt(value, fallback) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function parseBoolean(value, fallback) {
+  if (value === undefined) return fallback;
+  return ["1", "true", "yes", "on"].includes(String(value).toLowerCase());
+}
+
+function getLeaderboardOperationalConfig(env = process.env) {
+  return {
+    preseedEnabled: parseBoolean(env.KODER_LEADERBOARD_PRESEED_ENABLED, LEADERBOARD_OPERATIONAL_DEFAULTS.preseedEnabled),
+    endedRetentionMs: parseNonNegativeInt(env.KODER_LEADERBOARD_ENDED_RETENTION_MS, LEADERBOARD_OPERATIONAL_DEFAULTS.endedRetentionMs),
+    finalizedCleanupEnabled: parseBoolean(env.KODER_LEADERBOARD_FINALIZED_CLEANUP_ENABLED, LEADERBOARD_OPERATIONAL_DEFAULTS.finalizedCleanupEnabled),
+    finalizedCleanupGraceMs: parseNonNegativeInt(env.KODER_LEADERBOARD_FINALIZED_CLEANUP_GRACE_MS, LEADERBOARD_OPERATIONAL_DEFAULTS.finalizedCleanupGraceMs),
+    cleanupContestBatchSize: parsePositiveInt(env.KODER_LEADERBOARD_CLEANUP_CONTEST_BATCH_SIZE, LEADERBOARD_OPERATIONAL_DEFAULTS.cleanupContestBatchSize),
+    cleanupKeyScanCount: parsePositiveInt(env.KODER_LEADERBOARD_CLEANUP_KEY_SCAN_COUNT, LEADERBOARD_OPERATIONAL_DEFAULTS.cleanupKeyScanCount),
+  };
+}
+
 function buildLeaderboardBaseKey(contestId, generation) {
   return `${LEADERBOARD_KEY_PREFIX}:contest:${normalizeContestId(contestId)}:leaderboard:${normalizeGeneration(generation)}`;
 }
@@ -57,6 +92,10 @@ function buildLeaderboardSweepLockKey() {
   return `${LEADERBOARD_KEY_PREFIX}:leaderboard:sweepLock`;
 }
 
+function buildLeaderboardGenerationPattern(contestId) {
+  return `${LEADERBOARD_KEY_PREFIX}:contest:${normalizeContestId(contestId)}:leaderboard:generation-*`;
+}
+
 function buildLeaderboardProjectionPayload({ contestId, userId }) {
   return {
     contestId: normalizeContestId(contestId),
@@ -69,11 +108,14 @@ module.exports = {
   LEADERBOARD_META_STATE,
   LEADERBOARD_HEALTH,
   LEADERBOARD_METADATA_FIELDS,
+  LEADERBOARD_OPERATIONAL_DEFAULTS,
+  getLeaderboardOperationalConfig,
   buildLeaderboardKey,
   buildLeaderboardMembersKey,
   buildLeaderboardMetaKey,
   buildLeaderboardActiveVersionKey,
   buildLeaderboardRebuildLockKey,
   buildLeaderboardSweepLockKey,
+  buildLeaderboardGenerationPattern,
   buildLeaderboardProjectionPayload,
 };

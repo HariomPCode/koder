@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "npm run test:ci",
-    "test:ci": "node test_admin_security.js && node test_language_contract.js && node test_workspace_boundary.js && node test_logout.js && node test_error_handling.js && node test_database_foundation.js && node test_queue_infrastructure.js && node test_contest_engine.js && node test_scoring_contract.js && node test_leaderboard_encoding.js && node test_leaderboard_projection_integration.js && node test_leaderboard_rebuild.js && node test_standings_redis.js && node test_scoring_models.js && node test_scoring_engine.js && node test_scoring_ordering.js && node test_scoring_reconciliation.js && node test_contest_finalization.js && node test_standings_api.js",
+    "test:ci": "node test_admin_security.js && node test_language_contract.js && node test_workspace_boundary.js && node test_logout.js && node test_error_handling.js && node test_database_foundation.js && node test_queue_infrastructure.js && node test_contest_engine.js && node test_scoring_contract.js && node test_leaderboard_encoding.js && node test_leaderboard_projection_integration.js && node test_leaderboard_rebuild.js && node test_standings_redis.js && node test_leaderboard_retention.js && node test_scoring_models.js && node test_scoring_engine.js && node test_scoring_ordering.js && node test_scoring_reconciliation.js && node test_contest_finalization.js && node test_standings_api.js",
 
     "dev": "nodemon server.js"
   },
