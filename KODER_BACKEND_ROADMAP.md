@@ -1,6 +1,6 @@
 # Koder — Master Backend Architecture & Scalability Roadmap
 
-**Status:** Phases 1–5 implementation complete. Phase 6 scoring foundation (ISSUE-601/602/603/604) implemented. ISSUE-605+ pending. Redis leaderboard (Phase 7), SSE (Phase 8), and frontend contest features remain later phases.
+**Status:** Phases 1–6 and Phase 7 (ISSUE-701 through ISSUE-706) implementation and validation complete. SSE (Phase 8) and frontend contest features remain later phases.
 **Grounded in:** direct inspection of the `koder-main` repository snapshot (backend, workers, packages/shared, frontend, docker-compose, README.md, ISSUES.md). Every claim about "current behavior" below is cited to a file path. Nothing about a typical online judge is assumed if it isn't in the code.
 **Numbering:** `ISSUES.md` already documents ISSUE-001 through ISSUE-015 (all closed). New issues in this roadmap are numbered **ISSUE-101+** to avoid collision.
 

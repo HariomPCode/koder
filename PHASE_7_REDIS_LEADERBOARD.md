@@ -1,8 +1,8 @@
 # Phase 7 - Redis Leaderboard Projection
 
-**Status:** Architecture and reconnaissance only. No production code, schemas, routes,
-services, workers, tests, Git index, history, branches, or remotes were changed by
-this review.
+**Status:** ✅ COMPLETE through ISSUE-706. Production scoring remains MongoDB
+authoritative; Redis is a rebuildable live-read projection and finalized contests
+remain snapshot-only.
 
 **Baseline:** Phase 6 is checkpointed at `7b83371` and MongoDB is the authoritative
 scoring system. This document supersedes the pre-Phase-6 Redis scoring assumptions in
@@ -661,12 +661,71 @@ KODER_LEADERBOARD_FINALIZED_CLEANUP_GRACE_MS=604800000
 
 ## 12. Validation record
 
+### ISSUE-706 integrated validation
+
+The focused suite is `backend/test_issue706_integration.js`. It uses the real
+MongoDB models, the real scoring processor, the identifier-only projection
+enqueue contract, the real projection worker processor, versioned rebuilds, the
+HTTP `/standings` route, and a dedicated Redis database (`15`). Cleanup scans
+only the generated contest keys; it does not use `FLUSHDB` or `FLUSHALL`.
+
+Validated behavior:
+
+- Accepted, wrong, corrected, repeated, out-of-order, multi-problem, and
+  multi-participant submissions update Mongo first and converge through queued
+  identifier-only jobs to Redis.
+- Redis standings exactly match the Mongo-authoritative order, scores, penalties,
+  and gap-free ordinal ranks for the integration fixture. Projection duplicates
+  leave one ZSET member and one HASH entry per participant.
+- Missing live Redis keys, worker Redis errors, and rebuild recovery preserve
+  scoring and return Mongo standings until a healthy generation is published.
+- Concurrent rebuild requests serialize through the per-contest lock; the
+  published generation is `ready` and `healthy`, and publication occurs only
+  after population and validation.
+- Finalization creates the immutable Mongo snapshot. Mutating live participant
+  data, deleting/rebuilding Redis, and finalized-key cleanup do not change
+  `/standings` or `/standings/me`.
+- Retention cleanup is scoped, retry-safe, and cannot delete the final snapshot.
+
+The focused run passed **11 scenarios, 0 failed**. The existing ISSUE-701
+through ISSUE-705 suites and Phase 6 scoring/finalization suites remain in the
+backend CI command; worker projection tests remain in worker CI.
+
+### Scale observation and limitations
+
+The focused validation intentionally uses a small realistic fixture rather than
+introducing a benchmark framework. Rebuilds are cursor-based and flush bounded
+batches, so the implementation does not load an entire contest into application
+memory. A 10,000-participant benchmark was not claimed from this local run:
+timings would be dominated by shared developer-machine MongoDB/Redis state and
+would not constitute a production guarantee. Larger-scale capacity testing
+remains an operational exercise.
+
+### Phase 7 completion checklist
+
+| Contract | Result |
+|---|---|
+| ISSUE-701 encoding and key contracts | ✅ |
+| ISSUE-702 identifier-only asynchronous projection | ✅ |
+| ISSUE-703 generation rebuild, recovery, health, and locking | ✅ |
+| ISSUE-704 Redis live reads with Mongo fallback | ✅ |
+| ISSUE-705 retention, pre-seeding, and cleanup | ✅ |
+| ISSUE-706 integrated correctness, recovery, concurrency, and isolation | ✅ |
+| MongoDB remains authoritative scoring state | ✅ |
+| FINALIZED is snapshot-only | ✅ |
+| Redis failure cannot corrupt scoring or finalization | ✅ |
+| Redis data is rebuildable | ✅ |
+| Ranking and pagination are deterministic | ✅ |
+
+- **Focused test:** `backend/test_issue706_integration.js` — 11 scenarios passed.
+- **Docker dependencies:** local MongoDB and Redis containers were already
+  healthy during validation.
+- **Known limitation:** this validation does not claim production capacity
+  numbers or exercise a distributed multi-node deployment.
+
 - **Git status:** inspected read-only at review start; no Git write command was run.
-- **HEAD:** `7b833716803dc62484cad712d84fcc1d5288ea8a`
-- **HEAD subject:** `7b83371 feat: complete Phase 6 scoring reconciliation and finalization`
-- **Implementation started:** no.
-- **Files changed by this review:** `PHASE_7_REDIS_LEADERBOARD.md` and
-  `KODER_BACKEND_ROADMAP.md` only, as documentation artifacts.
+- **Implementation:** ISSUE-706 integration test and CI wiring; no production
+  behavior changes.
 - **Git staging/history/remote:** not modified.
 
 ### Exact files inspected
