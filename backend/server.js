@@ -6,6 +6,7 @@ require("dotenv").config({
 const connectDB = require("./db");
 const createApp = require("./app");
 const { startLeaderboardProjectionSweep } = require("./jobs/leaderboardProjectionSweep");
+const { startSubmissionReconciliation } = require("./jobs/submissionReconciliation");
 const app = createApp();
 
 async function startServer() {
@@ -15,6 +16,7 @@ async function startServer() {
     console.log("Server is running on port 5000");
   });
   startLeaderboardProjectionSweep();
+  startSubmissionReconciliation();
 }
 
 if (require.main === module) {

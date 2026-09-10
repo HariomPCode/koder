@@ -63,7 +63,11 @@ async function enqueueSubmission({ submissionId, language, userId, questionId })
     });
 
     if (job) {
-      await SubmissionRepository.updateStatus(submissionId, SUBMISSION_STATUS.QUEUED).catch(() => {});
+      await SubmissionRepository.updateStatusIfCurrent(
+        submissionId,
+        SUBMISSION_STATUS.CREATED,
+        SUBMISSION_STATUS.QUEUED,
+      ).catch(() => {});
     }
 
     return job;
@@ -72,7 +76,11 @@ async function enqueueSubmission({ submissionId, language, userId, questionId })
       try {
         const existingJob = await queue.getJob(jobId);
         if (existingJob) {
-          await SubmissionRepository.updateStatus(submissionId, SUBMISSION_STATUS.QUEUED).catch(() => {});
+          await SubmissionRepository.updateStatusIfCurrent(
+            submissionId,
+            SUBMISSION_STATUS.CREATED,
+            SUBMISSION_STATUS.QUEUED,
+          ).catch(() => {});
           return existingJob;
         }
       } catch (lookupError) {
@@ -80,9 +88,35 @@ async function enqueueSubmission({ submissionId, language, userId, questionId })
       }
     }
 
-    await SubmissionRepository.updateStatus(submissionId, SUBMISSION_STATUS.CREATED).catch(() => {});
+    await SubmissionRepository.updateStatusIfCurrent(
+      submissionId,
+      SUBMISSION_STATUS.CREATED,
+      SUBMISSION_STATUS.CREATED,
+    ).catch(() => {});
     throw AppError.unavailable("Queue unavailable while processing your submission");
   }
+}
+
+async function ensureSubmissionEnqueued({ submissionId, language, userId, questionId }) {
+  const normalizedLanguage = String(language || "").toLowerCase();
+  const queue = queueMap[normalizedLanguage];
+
+  if (!queue) {
+    throw AppError.badRequest(`No queue configured for language: ${normalizedLanguage}`);
+  }
+
+  const jobId = buildQueueJobId(normalizedLanguage, submissionId);
+  const existingJob = await queue.getJob(jobId);
+  if (existingJob) {
+    await SubmissionRepository.updateStatusIfCurrent(
+      submissionId,
+      SUBMISSION_STATUS.CREATED,
+      SUBMISSION_STATUS.QUEUED,
+    );
+    return existingJob;
+  }
+
+  return enqueueSubmission({ submissionId, language, userId, questionId });
 }
 
 module.exports = {
@@ -94,6 +128,7 @@ module.exports = {
   JOB_NAMES,
   QUEUE_STALL_DEFAULTS,
   enqueueSubmission,
+  ensureSubmissionEnqueued,
   getQueueForLanguage,
   isHealthy,
   buildQueueJobId,

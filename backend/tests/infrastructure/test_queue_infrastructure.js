@@ -10,6 +10,8 @@ const {
   QUEUE_RETENTION_DEFAULTS,
 } = require("../../../packages/shared/config/queues");
 const { SUBMISSION_STATUS } = require("../../../packages/shared/contracts/verdicts");
+const SubmissionRepository = require("../../repositories/submission.repository");
+const queueAdapter = require("../../queue/queueAdapter");
 
 async function runTests() {
   const passed = [];
@@ -104,6 +106,84 @@ async function runTests() {
     assert.strictEqual(SUBMISSION_STATUS.RUNNING, "running");
     assert.strictEqual(SUBMISSION_STATUS.COMPLETED, "completed");
     assert.ok(Object.values(SUBMISSION_STATUS).includes("pending"));
+  });
+
+  await testCase("Existing submission jobs are reused with conditional status repair", async () => {
+    const originalQueue = queueAdapter.queueMap.javascript;
+    const originalUpdate = SubmissionRepository.updateStatusIfCurrent;
+    let addCalls = 0;
+    const statusUpdates = [];
+    queueAdapter.queueMap.javascript = {
+      getJob: async () => ({ id: "javascript-existing-submission" }),
+      add: async () => {
+        addCalls += 1;
+        return { id: "unexpected" };
+      },
+    };
+    SubmissionRepository.updateStatusIfCurrent = async (...args) => {
+      statusUpdates.push(args);
+      return null;
+    };
+
+    try {
+      const job = await queueAdapter.ensureSubmissionEnqueued({
+        submissionId: "existing-submission",
+        language: "javascript",
+        userId: "user-1",
+        questionId: "question-1",
+      });
+      assert.strictEqual(job.id, "javascript-existing-submission");
+      assert.strictEqual(addCalls, 0);
+      assert.deepStrictEqual(statusUpdates, [[
+        "existing-submission",
+        SUBMISSION_STATUS.CREATED,
+        SUBMISSION_STATUS.QUEUED,
+      ]]);
+    } finally {
+      queueAdapter.queueMap.javascript = originalQueue;
+      SubmissionRepository.updateStatusIfCurrent = originalUpdate;
+    }
+  });
+
+  await testCase("Queue-add races with another reconciler without creating a duplicate", async () => {
+    const originalQueue = queueAdapter.queueMap.javascript;
+    const originalUpdate = SubmissionRepository.updateStatusIfCurrent;
+    let lookupCount = 0;
+    let addCalls = 0;
+    const statusUpdates = [];
+    queueAdapter.queueMap.javascript = {
+      getJob: async () => {
+        lookupCount += 1;
+        return lookupCount === 1 ? null : { id: "javascript-raced-submission" };
+      },
+      add: async () => {
+        addCalls += 1;
+        throw new Error("job already exists");
+      },
+    };
+    SubmissionRepository.updateStatusIfCurrent = async (...args) => {
+      statusUpdates.push(args);
+      return null;
+    };
+
+    try {
+      const job = await queueAdapter.ensureSubmissionEnqueued({
+        submissionId: "raced-submission",
+        language: "javascript",
+        userId: "user-1",
+        questionId: "question-1",
+      });
+      assert.strictEqual(job.id, "javascript-raced-submission");
+      assert.strictEqual(addCalls, 1);
+      assert.deepStrictEqual(statusUpdates, [[
+        "raced-submission",
+        SUBMISSION_STATUS.CREATED,
+        SUBMISSION_STATUS.QUEUED,
+      ]]);
+    } finally {
+      queueAdapter.queueMap.javascript = originalQueue;
+      SubmissionRepository.updateStatusIfCurrent = originalUpdate;
+    }
   });
 
   console.log("\n=======================================================================");

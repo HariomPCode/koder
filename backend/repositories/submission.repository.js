@@ -22,6 +22,29 @@ class SubmissionRepository {
     );
   }
 
+  async updateStatusIfCurrent(submissionId, currentStatus, nextStatus) {
+    if (!Submission || !Submission.findOneAndUpdate || Submission.db?.readyState === 0) {
+      return null;
+    }
+
+    return Submission.findOneAndUpdate(
+      { _id: submissionId, status: currentStatus },
+      { status: nextStatus },
+      { returnDocument: "after", runValidators: true },
+    );
+  }
+
+  async findStaleCreatedSubmissions({ cutoff, limit = 100 } = {}) {
+    return Submission.find({
+      status: SUBMISSION_STATUS.CREATED,
+      createdAt: { $lt: cutoff },
+    })
+      .sort({ createdAt: 1 })
+      .limit(limit)
+      .select("_id userId questionId language status createdAt")
+      .lean();
+  }
+
   async findByUserId(userId) {
     return Submission.find({ userId }).sort({ createdAt: -1 }).lean();
   }
