@@ -32,6 +32,12 @@ router.post("/:questionId", middleware, async (req, res, next) => {
       });
     }
 
+    if (error instanceof AppError && error.statusCode === 409) {
+      return res.status(409).json({
+        message: error.message,
+      });
+    }
+
     if (error instanceof AppError && error.statusCode === 503) {
       return res.status(503).json({
         message: error.message,

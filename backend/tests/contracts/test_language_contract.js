@@ -15,6 +15,8 @@ const queuedJobs = {
   python: [],
 };
 
+const idempotencyRecords = new Map();
+
 // Mock queue before loading routes so it doesn't open live redis connection
 const queuePath = require.resolve("../../queue");
 require.cache[queuePath] = {
@@ -22,7 +24,31 @@ require.cache[queuePath] = {
   filename: queuePath,
   loaded: true,
   exports: {
-    connection: { quit: async () => {}, disconnect: () => {} },
+    connection: {
+      quit: async () => {},
+      disconnect: () => {},
+      get: async (key) => idempotencyRecords.get(key) || null,
+      set: async (key, value, ...options) => {
+        if (options.includes("NX") && idempotencyRecords.has(key)) return null;
+        idempotencyRecords.set(key, value);
+        return "OK";
+      },
+      eval: async (script, keyCount, key, firstValue, secondValue) => {
+        const current = idempotencyRecords.get(key);
+        if (script.includes("DEL")) {
+          if (current === firstValue) {
+            idempotencyRecords.delete(key);
+            return 1;
+          }
+          return 0;
+        }
+        if (current === firstValue) {
+          idempotencyRecords.set(key, secondValue);
+          return "OK";
+        }
+        return null;
+      },
+    },
     jsQueue: {
       add: async function (name, data) {
         queuedJobs.javascript.push({ name, data });

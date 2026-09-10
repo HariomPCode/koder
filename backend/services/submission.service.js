@@ -4,8 +4,9 @@ const SubmissionRepository = require("../repositories/submission.repository");
 const QuestionRepository = require("../repositories/question.repository");
 const AppError = require("../errors/appError");
 const { validateSubmissionPayload, validateQuestionId } = require("../validators/request.validators");
+const { createSubmissionIdempotency } = require("./submissionIdempotency");
 
-async function createSubmission({ userId, questionId, language, code }) {
+async function createSubmission({ userId, questionId, language, code, idempotency = null }) {
   validateQuestionId(questionId);
   const normalizedLang = validateSubmissionPayload({ language, code });
 
@@ -14,13 +15,45 @@ async function createSubmission({ userId, questionId, language, code }) {
     throw AppError.notFound("Question does not exist");
   }
 
-  const submission = await SubmissionRepository.create({
-    userId,
-    questionId,
-    code,
-    language: normalizedLang,
-    status: SUBMISSION_STATUS.CREATED,
-  });
+  const guard = idempotency || createSubmissionIdempotency({ redis: queue.connection });
+  let reservation;
+  try {
+    reservation = await guard.reserve({ userId, questionId, code });
+  } catch (error) {
+    throw AppError.unavailable("Submission idempotency service unavailable");
+  }
+  if (reservation.type === "existing") {
+    return {
+      submissionId: reservation.submissionId,
+      status: "processing",
+    };
+  }
+  if (reservation.type === "in_progress") {
+    throw AppError.conflict("An identical submission is already being processed");
+  }
+
+  let submission;
+  try {
+    submission = await SubmissionRepository.create({
+      userId,
+      questionId,
+      code,
+      language: normalizedLang,
+      status: SUBMISSION_STATUS.CREATED,
+    });
+    try {
+      await guard.publish({
+        key: reservation.key,
+        token: reservation.token,
+        submissionId: submission._id,
+      });
+    } catch (error) {
+      throw AppError.unavailable("Submission idempotency service unavailable");
+    }
+  } catch (error) {
+    await guard.release(reservation).catch(() => {});
+    throw error;
+  }
 
   try {
     const enqueue = typeof queue.enqueueSubmission === "function"
