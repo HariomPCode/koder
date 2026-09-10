@@ -132,7 +132,12 @@ the limit prevents the allocation from escaping the container.
 - `java-queue`
 - `python-queue`
 
-The backend creates BullMQ `Queue` producers and adds `execute` jobs. Each language worker creates a BullMQ `Worker` for its own queue. No concurrency option is passed to the BullMQ workers, so each worker process uses BullMQ's default concurrency of 1.
+The backend creates BullMQ `Queue` producers and adds `execute` jobs. Each
+language worker creates a BullMQ `Worker` for its own queue. Worker
+concurrency is configurable per language and bounded by the shared
+Redis-backed host execution budget. See
+`docs/development/DOCKER.md#worker-capacity-budgeting` before increasing
+production values.
 
 If a job processor fails unexpectedly, `workerFactory` updates the associated submission with `Runtime Error`, or `Time Limit Exceeded` when the error signals a timeout.
 
@@ -252,7 +257,7 @@ node workers/tests/docker/test_sandbox_collision_docker.js
 
 ## Current Verification Status
 
-`ISSUES.md` marks ISSUE-001 through ISSUE-015 as complete. This includes authentication and password-hash protections, the shared workspace contract, the unified execution engine, sandbox hardening, CI-safe tests, Docker Compose infrastructure, end-to-end Python support, and the cross-language sandbox collision fix. Configurable worker concurrency and horizontal scaling are recorded as deferred capacity work, not open implementation issues.
+`ISSUES.md` marks ISSUE-001 through ISSUE-015 as complete. This includes authentication and password-hash protections, the shared workspace contract, the unified execution engine, sandbox hardening, CI-safe tests, Docker Compose infrastructure, end-to-end Python support, and the cross-language sandbox collision fix. Configurable worker concurrency and host-level capacity admission are implemented; deployment values remain host-specific and are documented in `docs/development/DOCKER.md`.
 
 ## Design Decisions
 
@@ -264,7 +269,7 @@ node workers/tests/docker/test_sandbox_collision_docker.js
 
 ## Limitations
 
-- Worker concurrency is the BullMQ default of one job per language worker process; configurable concurrency and horizontal scaling are not implemented.
+- Worker concurrency is configurable per language, with a Redis-backed host-wide admission budget. Production values must be benchmarked on the target host class; see `docs/development/DOCKER.md#worker-capacity-budgeting`.
 - Docker enforces the memory cap, but the engine does not measure memory usage or assign `Memory Limit Exceeded`; an out-of-memory failure can surface as a runtime error.
 - The Docker daemon is part of the trusted computing base. Run workers only on a host where the daemon is not exposed to untrusted users, keep Docker's built-in seccomp/AppArmor (or equivalent) enabled, and do not add host mounts, Docker-socket mounts, host networking, or privileged mode to submission containers.
 - `seedProblems.js` and `promoteAdmin.js` require `backend/.env` in addition to the root `.env` workflow.
