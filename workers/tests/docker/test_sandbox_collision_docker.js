@@ -77,7 +77,7 @@ async function runTests() {
   assert.strictEqual(new Set(directories).size, 3);
   assert.deepStrictEqual(
     directories.map((directory) => path.basename(directory)).sort(),
-    ["javascript-1", "java-1", "python-1"].sort(),
+    ["javascript-1-0", "java-1-0", "python-1-0"].sort(),
   );
 
   for (const sandbox of TrackingSandbox.instances) {

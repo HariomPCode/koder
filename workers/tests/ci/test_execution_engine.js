@@ -92,6 +92,58 @@ function createDependencies(details, updates) {
   };
 }
 
+async function testAttemptSpecificSandboxIdentity() {
+  const updates = [];
+  const executionKeys = [];
+  const cleanedKeys = [];
+  const sandboxDirectories = new Map();
+  const details = {
+    language: jsExecutor.config.language,
+    code: "function solve() { return true; }",
+    slug: "two-sum",
+    functionName: null,
+    parameters: [],
+    returnType: null,
+    testcases: [{ input: "case-1", output: "true" }],
+  };
+  const dependencies = {
+    getQuestionDetails: async () => details,
+    updateSubmission: async (submissionId, result) => {
+      updates.push({ submissionId, result });
+      return result;
+    },
+    createSandbox: (executionKey) => {
+      executionKeys.push(executionKey);
+      const jobDir = fs.mkdtempSync(path.join(os.tmpdir(), "koder-attempt-test-"));
+      sandboxDirectories.set(jobDir, executionKey);
+      return jobDir;
+    },
+    cleanupSandbox: (jobDir) => {
+      cleanedKeys.push(sandboxDirectories.get(jobDir));
+      fs.rmSync(jobDir, { recursive: true, force: true });
+    },
+    DockerSandbox: FakeSandbox,
+  };
+  const execute = createExecutionExecutor(jsExecutor.config, dependencies);
+  const job = {
+    id: "retry-job",
+    data: { submissionId: "retry-submission" },
+    attemptsMade: 0,
+  };
+
+  await execute(job);
+  await execute({ ...job, attemptsMade: 1 });
+  await execute({ ...job, attemptsMade: 1 });
+
+  assert.deepStrictEqual(executionKeys, [
+    "javascript-retry-job-0",
+    "javascript-retry-job-1",
+    "javascript-retry-job-1",
+  ]);
+  assert.deepStrictEqual(cleanedKeys, executionKeys);
+  assert.strictEqual(updates.length, 3);
+}
+
 async function testLanguageExecutor(name, executor, expectedCommand) {
   const updates = [];
   const details = {
@@ -215,6 +267,8 @@ async function runTests() {
     javaSandbox.commands.find((command) => command.type === "exec").command,
     ["javac", "Main.java"],
   );
+
+  await testAttemptSpecificSandboxIdentity();
 
   console.log("✓ Shared execution engine works with JavaScript and Java configurations");
 }
