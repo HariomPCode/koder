@@ -126,7 +126,7 @@ async function createWorker(queueName, processor) {
   const shutdown = async (signal) => {
     try {
       console.log(`Shutting down ${queueName} worker on ${signal}...`);
-      await worker.close(true);
+      await worker.close();
       await closeLeaderboardProjectionProducer();
       await connection.quit();
       process.exit(0);
