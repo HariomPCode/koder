@@ -638,7 +638,7 @@ Reproducible local Docker infrastructure implemented and documented.
 
 - `docker-compose.yml` — Orchestrates MongoDB, Redis, backend, and workers.
 - `.env.example` — Example environment configuration.
-- `DOCKER.md` — Complete documentation of Docker setup and development workflow.
+- `docs/development/docs/development/DOCKER.md` — Complete documentation of Docker setup and development workflow.
 - MongoDB service with persistent volume and healthcheck.
 - Redis service with healthcheck.
 - Backend and worker services configured and networked.
@@ -789,7 +789,7 @@ Run a controlled benchmark to determine safe driver capacity for a worker host b
 
 **Current State**
 
-The project now includes a benchmark harness at `workers/test_worker_capacity.js`. It runs progressive concurrency levels and records durations, throughput, and host pressure indicators without introducing a final 10,000-user contest load test.
+The project now includes a benchmark harness at `workers/tests/ci/test_worker_capacity.js`. It runs progressive concurrency levels and records durations, throughput, and host pressure indicators without introducing a final 10,000-user contest load test.
 
 **What Was Implemented**
 
@@ -812,7 +812,7 @@ These numbers show the host remained healthy through 8 measured concurrent jobs 
 
 **Files In Scope**
 
-- `workers/test_worker_capacity.js`
+- `workers/tests/ci/test_worker_capacity.js`
 - `workers/common/*`
 - `packages/shared/config/queues.js`
 - `ISSUES.md`
@@ -992,7 +992,7 @@ This phase is intentionally limited to architecture review and issue planning. N
 **Files likely affected:**
 - `packages/shared/models/Contest.js`
 - `packages/shared/models/Submission.js`
-- `KODER_BACKEND_ROADMAP.md`
+- `docs/architecture/KODER_BACKEND_ROADMAP.md`
 
 **Dependencies:** none; this is the foundation for all contest operations
 
@@ -1012,8 +1012,8 @@ This phase is intentionally limited to architecture review and issue planning. N
 
 **Files likely affected:**
 - `packages/shared/models/Contest.js`
-- `KODER_BACKEND_ROADMAP.md`
-- `PHASE_5_CONTEST_ENGINE.md`
+- `docs/architecture/KODER_BACKEND_ROADMAP.md`
+- `docs/phases/phase-05/CONTEST_ENGINE.md`
 
 **Dependencies:** ISSUE-501
 
@@ -1055,7 +1055,7 @@ This phase is intentionally limited to architecture review and issue planning. N
 **Files likely affected:**
 - `packages/shared/models/ContestParticipant.js`
 - `packages/shared/models/Contest.js`
-- `KODER_BACKEND_ROADMAP.md`
+- `docs/architecture/KODER_BACKEND_ROADMAP.md`
 
 **Dependencies:** ISSUE-501, ISSUE-502
 
@@ -1119,7 +1119,7 @@ This phase is intentionally limited to architecture review and issue planning. N
 **Files likely affected:**
 - `packages/shared/models/Submission.js`
 - `packages/shared/models/ContestLeaderboardSnapshot.js`
-- `KODER_BACKEND_ROADMAP.md`
+- `docs/architecture/KODER_BACKEND_ROADMAP.md`
 
 **Dependencies:** ISSUE-505, ISSUE-506
 
@@ -1140,7 +1140,7 @@ This phase is intentionally limited to architecture review and issue planning. N
 **Files likely affected:**
 - `packages/shared/models/Contest.js`
 - `packages/shared/models/ContestLeaderboardSnapshot.js`
-- `KODER_BACKEND_ROADMAP.md`
+- `docs/architecture/KODER_BACKEND_ROADMAP.md`
 
 **Dependencies:** ISSUE-507
 
@@ -1159,8 +1159,8 @@ This phase is intentionally limited to architecture review and issue planning. N
 **Objective:** Define how contest state recovers after API, MongoDB, Redis, scheduler, or worker outages without trusting Redis as the permanent source of truth.
 
 **Files likely affected:**
-- `KODER_BACKEND_ROADMAP.md`
-- `PHASE_5_CONTEST_ENGINE.md`
+- `docs/architecture/KODER_BACKEND_ROADMAP.md`
+- `docs/phases/phase-05/CONTEST_ENGINE.md`
 - `packages/shared/models/*`
 
 **Dependencies:** ISSUE-501, ISSUE-506, ISSUE-508
@@ -1182,7 +1182,7 @@ This phase is intentionally limited to architecture review and issue planning. N
 **Files likely affected:**
 - `backend/routes/*.js`
 - `backend/middleware.js`
-- `KODER_BACKEND_ROADMAP.md`
+- `docs/architecture/KODER_BACKEND_ROADMAP.md`
 
 **Dependencies:** ISSUE-501, ISSUE-504, ISSUE-508
 
@@ -1202,8 +1202,8 @@ This phase is intentionally limited to architecture review and issue planning. N
 
 **Files likely affected:**
 - `ISSUES.md`
-- `KODER_BACKEND_ROADMAP.md`
-- `PHASE_5_CONTEST_ENGINE.md`
+- `docs/architecture/KODER_BACKEND_ROADMAP.md`
+- `docs/phases/phase-05/CONTEST_ENGINE.md`
 
 **Dependencies:** all Phase 5 design issues
 
@@ -1240,7 +1240,7 @@ This phase is intentionally limited to architecture review and issue planning. N
 | 3 | Standings visibility | `GET /standings` public. `GET /standings/me` requires auth. Respect Phase 5 contest-state visibility rules. |
 | 4 | Points-based scoring | Defer `Contest.scoringMode`. Phase 6 ICPC-only. No speculative points-based fields or logic. |
 
-See `PHASE_6_SCORING_ENGINE.md` §16 (force-finalize), §22 (API/unregister), §26 (locked decisions).
+See `docs/phases/phase-06/SCORING_ENGINE.md` §16 (force-finalize), §22 (API/unregister), §26 (locked decisions).
 
 ### ISSUE-601 — Scoring contract and ICPC penalty semantics
 
@@ -1260,14 +1260,14 @@ See `PHASE_6_SCORING_ENGINE.md` §16 (force-finalize), §22 (API/unregister), §
 
 **Likely files:**
 - `packages/shared/contracts/scoring.js` (new)
-- `PHASE_6_SCORING_ENGINE.md`
-- `KODER_BACKEND_ROADMAP.md`
+- `docs/phases/phase-06/SCORING_ENGINE.md`
+- `docs/architecture/KODER_BACKEND_ROADMAP.md`
 
 **Testing requirements:** unit tests for penalty formula, tie-break ordering, verdict classification
 
 **Acceptance criteria:** scoring rules are deterministic, documented, and independently testable without Redis or workers
 
-**Implementation:** `packages/shared/contracts/scoring.js`, `backend/test_scoring_contract.js`
+**Implementation:** `packages/shared/contracts/scoring.js`, `backend/tests/contracts/test_scoring_contract.js`
 
 ---
 
@@ -1283,7 +1283,7 @@ See `PHASE_6_SCORING_ENGINE.md` §16 (force-finalize), §22 (API/unregister), §
 - Extend `ContestParticipant` with aggregate fields (`solvedCount`, `totalPenalty`, `lastAcceptedContestMs`)
 - Add `ContestParticipantProblem` per-problem authoritative state
 - Add `ContestScoredSubmission` idempotency ledger
-- Required indexes per `PHASE_6_SCORING_ENGINE.md` §19
+- Required indexes per `docs/phases/phase-06/SCORING_ENGINE.md` §19
 
 **Dependencies:** ISSUE-601
 
@@ -1297,7 +1297,7 @@ See `PHASE_6_SCORING_ENGINE.md` §16 (force-finalize), §22 (API/unregister), §
 
 **Acceptance criteria:** standings can be represented from Mongo aggregates without Redis; per-problem state is not embedded in contest document
 
-**Implementation:** `packages/shared/models/ContestParticipantProblem.js`, `packages/shared/models/ContestScoredSubmission.js`, extended `ContestParticipant`, `backend/test_scoring_models.js`
+**Implementation:** `packages/shared/models/ContestParticipantProblem.js`, `packages/shared/models/ContestScoredSubmission.js`, extended `ContestParticipant`, `backend/tests/scoring/test_scoring_models.js`
 
 ---
 
@@ -1326,7 +1326,7 @@ See `PHASE_6_SCORING_ENGINE.md` §16 (force-finalize), §22 (API/unregister), §
 
 **Acceptance criteria:** judge path unchanged semantically; scoring is a separate post-result step in the shared persistence boundary
 
-**Implementation:** `packages/shared/scoring/applySubmissionResult.js`, `packages/shared/db/dbCalls.js` (`triggerContestScoring` hook), `backend/test_scoring_engine.js`
+**Implementation:** `packages/shared/scoring/applySubmissionResult.js`, `packages/shared/db/dbCalls.js` (`triggerContestScoring` hook), `backend/tests/scoring/test_scoring_engine.js`
 
 ---
 
@@ -1348,13 +1348,13 @@ See `PHASE_6_SCORING_ENGINE.md` §16 (force-finalize), §22 (API/unregister), §
 
 **Likely files:**
 - `packages/shared/scoring/applySubmissionResult.js`
-- `backend/test_scoring_engine.js`
+- `backend/tests/scoring/test_scoring_engine.js`
 
 **Testing requirements:** replay same `submissionId` 10× → identical participant state; partial aggregate failure heals on retry; duplicate key handled gracefully
 
 **Acceptance criteria:** idempotent under worker retry, reconciliation retry, and manual re-invocation; stale aggregates reconstruct from per-problem state on reprocess
 
-**Implementation:** `reconcileParticipantAggregate()` in `packages/shared/scoring/applySubmissionResult.js`, extended `backend/test_scoring_engine.js`
+**Implementation:** `reconcileParticipantAggregate()` in `packages/shared/scoring/applySubmissionResult.js`, extended `backend/tests/scoring/test_scoring_engine.js`
 
 ---
 
@@ -1375,7 +1375,7 @@ See `PHASE_6_SCORING_ENGINE.md` §16 (force-finalize), §22 (API/unregister), §
 **Likely files:**
 - `backend/services/scoring.service.js`
 - `backend/repositories/submission.repository.js` (scoring queries)
-- `backend/test_scoring_engine.js` (new)
+- `backend/tests/scoring/test_scoring_engine.js` (new)
 
 **Testing requirements:** permuted arrival orders (B,A,C and C,A,B) produce identical standings; concurrent solve attempts produce one winner
 
@@ -1393,7 +1393,7 @@ See `PHASE_6_SCORING_ENGINE.md` §16 (force-finalize), §22 (API/unregister), §
 - `reconcileContestScoring(contestId)` full recompute
 - Drift detection: compare rebuild vs live aggregates
 - Sweep for `completed` contest submissions missing ledger entries
-- Document operational runbook in `PHASE_6_SCORING_ENGINE.md`
+- Document operational runbook in `docs/phases/phase-06/SCORING_ENGINE.md`
 
 **Dependencies:** ISSUE-602, ISSUE-605
 
@@ -1401,7 +1401,7 @@ See `PHASE_6_SCORING_ENGINE.md` §16 (force-finalize), §22 (API/unregister), §
 - `backend/services/scoring-reconcile.service.js` (new)
 - `backend/repositories/scoring.repository.js`
 - `backend/repositories/submission.repository.js`
-- `PHASE_6_SCORING_ENGINE.md`
+- `docs/phases/phase-06/SCORING_ENGINE.md`
 
 **Testing requirements:** inject drift → reconcile restores exact standings; rebuild matches incremental scoring on fixture contests
 
@@ -1472,9 +1472,9 @@ See `PHASE_6_SCORING_ENGINE.md` §16 (force-finalize), §22 (API/unregister), §
 **Objective:** Maintain Phase 6 architecture docs, roadmap alignment, and implementation sequencing.
 
 **Scope:**
-- `PHASE_6_SCORING_ENGINE.md` (complete)
+- `docs/phases/phase-06/SCORING_ENGINE.md` (complete)
 - `ISSUES.md` Phase 6 section (this section)
-- `KODER_BACKEND_ROADMAP.md` Phase 6 status update
+- `docs/architecture/KODER_BACKEND_ROADMAP.md` Phase 6 status update
 
 **Dependencies:** all Phase 6 design issues
 
@@ -1537,7 +1537,7 @@ Phase 5 contest engine implementation is complete (lifecycle, registration, subm
 - Scoring is triggered post-judge, not inside the executor
 - Redis is not required for correctness in Phase 6
 
-**All product policy decisions are locked** (force-finalize, unregister, standings visibility, ICPC-only scoring). See `PHASE_6_SCORING_ENGINE.md` §26.
+**All product policy decisions are locked** (force-finalize, unregister, standings visibility, ICPC-only scoring). See `docs/phases/phase-06/SCORING_ENGINE.md` §26.
 
 **ISSUE-601, ISSUE-602, ISSUE-603, and ISSUE-604 are implemented.** ISSUE-605 through ISSUE-608 remain pending.
 
@@ -1616,7 +1616,7 @@ Submission processing uses language-specific BullMQ queues and a shared queue ad
 - `backend/routes/submission.route.js`
 - `backend/repositories/submission.repository.js`
 - `workers/common/workerFactory.js`
-- `backend/test_queue_infrastructure.js`
+- `backend/tests/infrastructure/test_queue_infrastructure.js`
 
 **Dependencies:** Phase 1, Phase 2
 
@@ -1624,7 +1624,7 @@ Submission processing uses language-specific BullMQ queues and a shared queue ad
 
 ### Phase 5 — Contest Engine ✅ COMPLETE
 
-Contest lifecycle, registration, problem binding, submission validation, queue integration, and finalization boundary are implemented and tested (`backend/test_contest_engine.js`).
+Contest lifecycle, registration, problem binding, submission validation, queue integration, and finalization boundary are implemented and tested (`backend/tests/contest/test_contest_engine.js`).
 
 ### Phase 6 — Scoring Engine (ISSUE-601/602/603/604 implemented; ISSUE-605+ pending)
 
@@ -1697,13 +1697,13 @@ koder/
 
 ### Discovered During Verification
 
-**`workers/test_advanced.js` — Unrelated pre-existing issue**
+**`workers/tests/smoke/test_advanced.js` — Unrelated pre-existing issue**
 
 ```
 TypeError: serializeBatch is not a function
 ```
 
-**Location:** `workers/test_advanced.js` (manual smoke test)
+**Location:** `workers/tests/smoke/test_advanced.js` (manual smoke test)
 
 **Status:** Not yet associated with any specific completed issue; emerged during verification work.
 

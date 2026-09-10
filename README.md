@@ -150,7 +150,7 @@ If a job processor fails unexpectedly, `workerFactory` updates the associated su
 ├── packages/shared/         Shared models, configuration, contracts, runner generation, DB helpers
 ├── docker-compose.yml       MongoDB and Redis local infrastructure
 ├── .env.example             Local environment template
-├── DOCKER.md                Docker Compose notes
+├── docs/development/docs/development/DOCKER.md                Docker Compose notes
 └── ISSUES.md                Issue and implementation history
 ```
 
@@ -244,10 +244,10 @@ The project uses Node scripts and built-in `assert`; it does not use an external
 | `npm run test:security --workspace=workers` | workers | `test_java_sandbox_security.js`; requires Docker and checks Java API guards, resource limits, and cleanup |
 | `npm run test:smoke --workspace=workers` | workers | manual Docker/MongoDB smoke scripts |
 
-`workers/test_sandbox_collision_docker.js` directly checks the cross-language sandbox collision fix, but it is not included in a package script. Run it manually when Docker is available:
+`workers/tests/docker/test_sandbox_collision_docker.js` directly checks the cross-language sandbox collision fix, but it is not included in a package script. Run it manually when Docker is available:
 
 ```powershell
-node workers/test_sandbox_collision_docker.js
+node workers/tests/docker/test_sandbox_collision_docker.js
 ```
 
 ## Current Verification Status
