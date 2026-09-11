@@ -19,9 +19,17 @@ const PUBLISH_SUBMISSION_SCRIPT = `
   return nil
 `;
 
-function buildSubmissionIdempotencyKey({ userId, questionId, code }) {
+function buildSubmissionIdempotencyKey({
+  userId,
+  questionId,
+  contestId = null,
+  contestProblemId = null,
+  code,
+}) {
   const identity = JSON.stringify([
     String(userId),
+    contestId == null ? null : String(contestId),
+    contestProblemId == null ? null : String(contestProblemId),
     String(questionId),
     String(code),
   ]);
@@ -47,8 +55,20 @@ function createSubmissionIdempotency({ redis, ttlSeconds = SUBMISSION_IDEMPOTENC
     }
   }
 
-  async function reserve({ userId, questionId, code }) {
-    const key = buildSubmissionIdempotencyKey({ userId, questionId, code });
+  async function reserve({
+    userId,
+    questionId,
+    contestId = null,
+    contestProblemId = null,
+    code,
+  }) {
+    const key = buildSubmissionIdempotencyKey({
+      userId,
+      questionId,
+      contestId,
+      contestProblemId,
+      code,
+    });
     const token = crypto.randomUUID();
     const reservation = JSON.stringify({ state: "reserved", token });
     const acquired = await redis.set(key, reservation, "EX", ttlSeconds, "NX");

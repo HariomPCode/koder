@@ -17,6 +17,7 @@ const queue = require("../queue");
 const { validateSubmissionPayload } = require("../validators/request.validators");
 const ScoringReconcileService = require("./scoring-reconcile.service");
 const standingsService = require("./standings.service");
+const { createSubmissionIdempotency } = require("./submissionIdempotency");
 const {
   CONTEST_STATUS,
   getNextContestLifecycleStatus,
@@ -266,7 +267,7 @@ async function getContestProblems({ contestId, userId = null }) {
   };
 }
 
-async function createContestSubmission({ contestId, userId, payload }) {
+async function createContestSubmission({ contestId, userId, payload, idempotency = null }) {
   const contest = await ContestRepository.findById(contestId);
   if (!contest) {
     throw AppError.notFound("Contest not found");
@@ -308,16 +309,56 @@ async function createContestSubmission({ contestId, userId, payload }) {
     throw AppError.notFound("Question for contest problem not found");
   }
 
-  const submission = await ContestRepository.createSubmission({
-    userId,
-    questionId: question._id,
-    contestId: currentContest._id,
-    contestProblemId: contestProblem._id,
-    submittedAtContestMs,
-    code: normalizedPayload.code,
-    language: normalizedLanguage,
-    status: SUBMISSION_STATUS.CREATED,
-  });
+  const guard = idempotency || createSubmissionIdempotency({ redis: queue.connection });
+  let reservation;
+  try {
+    reservation = await guard.reserve({
+      userId,
+      questionId: question._id,
+      contestId: currentContest._id,
+      contestProblemId: contestProblem._id,
+      code: normalizedPayload.code,
+    });
+  } catch (error) {
+    throw AppError.unavailable("Submission idempotency service unavailable");
+  }
+
+  if (reservation.type === "existing") {
+    return {
+      submissionId: reservation.submissionId,
+      status: "processing",
+    };
+  }
+
+  if (reservation.type === "in_progress") {
+    throw AppError.conflict("An identical submission is already being processed");
+  }
+
+  let submission;
+  try {
+    submission = await ContestRepository.createSubmission({
+      userId,
+      questionId: question._id,
+      contestId: currentContest._id,
+      contestProblemId: contestProblem._id,
+      submittedAtContestMs,
+      code: normalizedPayload.code,
+      language: normalizedLanguage,
+      status: SUBMISSION_STATUS.CREATED,
+    });
+
+    await guard.publish({
+      key: reservation.key,
+      token: reservation.token,
+      submissionId: submission._id,
+    });
+  } catch (error) {
+    await guard.release(reservation).catch(() => {});
+    if (error instanceof AppError) {
+      throw error;
+    }
+    throw AppError.unavailable("Submission idempotency service unavailable");
+  }
 
   try {
     await queue.enqueueSubmission({

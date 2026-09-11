@@ -4,6 +4,8 @@ const cors = require("cors");
 
 const apiRoute = require("./routes/apiRoute");
 const adminRoute = require("./routes/admin.route");
+const healthRoute = require("./routes/health.route");
+const metrics = require("./services/metrics");
 const { notFoundHandler, errorHandler } = require("./errorHandler");
 
 function createApp() {
@@ -18,7 +20,10 @@ function createApp() {
 
   app.use(express.json());
   app.use(cookieParser());
+  app.use(metrics.httpMiddleware);
 
+  app.use("/health", healthRoute);
+  app.get("/metrics", metrics.handler);
   app.use("/api/v1", apiRoute);
   app.use("/admin", adminRoute);
 
