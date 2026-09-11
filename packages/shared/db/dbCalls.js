@@ -3,6 +3,7 @@ const Question = require("../models/Question");
 const { SUBMISSION_STATUS } = require("../contracts/verdicts");
 const { createLogger } = require("../logger");
 const logger = createLogger("shared.submission");
+const eventBus = require("../events/eventBus");
 const { applySubmissionResult } = require("../scoring/applySubmissionResult");
 const {
   enqueueLeaderboardProjectionIfConfigured,
@@ -63,7 +64,7 @@ async function getQuestionDetails(submissionId, { SubmissionModel = Submission, 
 }
 
 async function markSubmissionRunning(submissionId, { SubmissionModel = Submission } = {}) {
-  return SubmissionModel.findOneAndUpdate(
+  const submission = await SubmissionModel.findOneAndUpdate(
     {
       _id: submissionId,
       status: { $ne: SUBMISSION_STATUS.COMPLETED },
@@ -76,6 +77,14 @@ async function markSubmissionRunning(submissionId, { SubmissionModel = Submissio
       runValidators: true,
     },
   );
+  if (submission) {
+    eventBus.emit("submission.running", {
+      submissionId: String(submission._id),
+      userId: String(submission.userId),
+      contestId: submission.contestId ? String(submission.contestId) : null,
+    });
+  }
+  return submission;
 }
 
 async function updateSubmission(
@@ -100,6 +109,7 @@ async function updateSubmission(
         memory: result.memory,
         failedTestCase: result.failedTestCase,
         errorMessage: result.errorMessage,
+        failureType: result.failureType || null,
       },
     },
     {
@@ -116,6 +126,14 @@ async function updateSubmission(
       existingSubmission.contestId
     ) {
       await triggerContestScoring(submissionId, existingSubmission, { onProjectionFailure });
+      eventBus.emit("submission.completed", {
+        submissionId: String(existingSubmission._id),
+        userId: String(existingSubmission.userId),
+        contestId: existingSubmission.contestId ? String(existingSubmission.contestId) : null,
+        status: existingSubmission.status,
+        verdict: existingSubmission.verdict,
+        failureType: existingSubmission.failureType || null,
+      });
     }
     return null;
   }
@@ -123,6 +141,15 @@ async function updateSubmission(
   if (submission.contestId) {
     await triggerContestScoring(submissionId, submission, { onProjectionFailure });
   }
+
+  eventBus.emit("submission.completed", {
+    submissionId: String(submission._id),
+    userId: String(submission.userId),
+    contestId: submission.contestId ? String(submission.contestId) : null,
+    status: submission.status,
+    verdict: submission.verdict,
+    failureType: submission.failureType || null,
+  });
 
   return submission;
 }

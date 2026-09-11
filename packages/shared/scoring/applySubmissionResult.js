@@ -278,6 +278,10 @@ async function applySubmissionResult(submissionId, options = {}) {
     return { processed: false, reason: "practice_submission" };
   }
 
+  if (submission.failureType === "infrastructure") {
+    return { processed: false, reason: "infrastructure_failure" };
+  }
+
   if (!isTerminalForScoring(submission.status)) {
     return { processed: false, reason: "submission_not_terminal" };
   }

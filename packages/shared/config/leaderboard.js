@@ -31,6 +31,7 @@ const LEADERBOARD_METADATA_FIELDS = Object.freeze({
 
 const LEADERBOARD_OPERATIONAL_DEFAULTS = Object.freeze({
   preseedEnabled: false,
+  snapshotIntervalMs: 60 * 1000,
   endedRetentionMs: 24 * 60 * 60 * 1000,
   finalizedCleanupEnabled: false,
   finalizedCleanupGraceMs: 7 * 24 * 60 * 60 * 1000,
@@ -56,6 +57,7 @@ function parseBoolean(value, fallback) {
 function getLeaderboardOperationalConfig(env = process.env) {
   return {
     preseedEnabled: parseBoolean(env.KODER_LEADERBOARD_PRESEED_ENABLED, LEADERBOARD_OPERATIONAL_DEFAULTS.preseedEnabled),
+    snapshotIntervalMs: parsePositiveInt(env.KODER_LEADERBOARD_SNAPSHOT_INTERVAL_MS, LEADERBOARD_OPERATIONAL_DEFAULTS.snapshotIntervalMs),
     endedRetentionMs: parseNonNegativeInt(env.KODER_LEADERBOARD_ENDED_RETENTION_MS, LEADERBOARD_OPERATIONAL_DEFAULTS.endedRetentionMs),
     finalizedCleanupEnabled: parseBoolean(env.KODER_LEADERBOARD_FINALIZED_CLEANUP_ENABLED, LEADERBOARD_OPERATIONAL_DEFAULTS.finalizedCleanupEnabled),
     finalizedCleanupGraceMs: parseNonNegativeInt(env.KODER_LEADERBOARD_FINALIZED_CLEANUP_GRACE_MS, LEADERBOARD_OPERATIONAL_DEFAULTS.finalizedCleanupGraceMs),

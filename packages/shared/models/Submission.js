@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const { SUPPORTED_LANGUAGES } = require("../config/languages");
-const { SUBMISSION_STATUS, JUDGE_VERDICTS } = require("../contracts/verdicts");
+const { SUBMISSION_STATUS, JUDGE_VERDICTS, FAILURE_TYPES } = require("../contracts/verdicts");
 
 const submissionSchema = new mongoose.Schema(
   {
@@ -52,6 +52,12 @@ const submissionSchema = new mongoose.Schema(
     verdict: {
       type: String,
       enum: Object.values(JUDGE_VERDICTS),
+    },
+
+    failureType: {
+      type: String,
+      enum: Object.values(FAILURE_TYPES),
+      default: null,
     },
 
     passedTestCases: {

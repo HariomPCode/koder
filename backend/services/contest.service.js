@@ -27,6 +27,15 @@ const { formatStanding, paginationResult } = standingsService;
 const { parsePagination, paginationResult: buildPaginationResult } = require("../utils/pagination");
 const { createLogger } = require("@koder/shared");
 const logger = createLogger("backend.contest");
+const eventBus = require("../events/eventBus");
+let contestLeaderboardLifecycle = null;
+
+function getContestLeaderboardLifecycle() {
+  if (!contestLeaderboardLifecycle) {
+    contestLeaderboardLifecycle = require("./contestLeaderboardLifecycle").createContestLeaderboardLifecycle();
+  }
+  return contestLeaderboardLifecycle;
+}
 
 const VALID_TRANSITIONS = Object.freeze({
   [CONTEST_STATUS.DRAFT]: [CONTEST_STATUS.SCHEDULED],
@@ -67,6 +76,13 @@ async function syncContestLifecycle(contest) {
   if (nextStatus !== contest.status) {
     contest.status = nextStatus;
     await contest.save();
+    if (nextStatus === CONTEST_STATUS.RUNNING) {
+      await getContestLeaderboardLifecycle().preseedContest(contest._id);
+    }
+    eventBus.emit("contest.lifecycle", {
+      contestId: String(contest._id),
+      status: nextStatus,
+    });
   }
 
   return contest;
@@ -181,6 +197,13 @@ async function transitionContestStatus({ contestId, targetStatus, actorUserId })
 
   contest.status = normalizedTarget;
   await contest.save();
+  if (normalizedTarget === CONTEST_STATUS.RUNNING) {
+    await getContestLeaderboardLifecycle().preseedContest(contest._id);
+  }
+  eventBus.emit("contest.lifecycle", {
+    contestId: String(contest._id),
+    status: normalizedTarget,
+  });
   return { contest };
 }
 
@@ -257,15 +280,14 @@ async function getContestProblems({ contestId, userId = null }) {
 
   const currentContest = await syncContestLifecycle(contest);
 
-  if (userId) {
-    const participant = await ContestRepository.findParticipant(contestId, userId);
-    if (!participant && currentContest.status !== CONTEST_STATUS.ENDED && currentContest.status !== CONTEST_STATUS.FINALIZED) {
-      throw AppError.forbidden("You must register before viewing contest problems");
-    }
-  }
-
   const problemIds = currentContest.problems.map((problem) => problem.questionId);
-  const questions = await Question.find({ _id: { $in: problemIds } }).lean();
+  const [participant, questions] = await Promise.all([
+    userId ? ContestRepository.findParticipant(contestId, userId) : Promise.resolve(null),
+    Question.find({ _id: { $in: problemIds } }).lean(),
+  ]);
+  if (userId && !participant && currentContest.status !== CONTEST_STATUS.ENDED && currentContest.status !== CONTEST_STATUS.FINALIZED) {
+    throw AppError.forbidden("You must register before viewing contest problems");
+  }
   const questionMap = new Map(questions.map((question) => [String(question._id), question]));
 
   return {
@@ -356,6 +378,12 @@ async function createContestSubmission({ contestId, userId, payload, idempotency
       language: normalizedLanguage,
       status: SUBMISSION_STATUS.CREATED,
     });
+    eventBus.emit("submission.created", {
+      submissionId: String(submission._id),
+      userId: String(userId),
+      questionId: String(question._id),
+      contestId: String(currentContest._id),
+    });
 
     await guard.publish({
       key: reservation.key,
@@ -377,6 +405,12 @@ async function createContestSubmission({ contestId, userId, payload, idempotency
       questionId: question._id,
       language: normalizedLanguage,
       contestId: currentContest._id,
+    });
+    eventBus.emit("submission.queued", {
+      submissionId: String(submission._id),
+      userId: String(userId),
+      questionId: String(question._id),
+      contestId: String(currentContest._id),
     });
   } catch (error) {
     await Submission.findByIdAndUpdate(submission._id, { status: SUBMISSION_STATUS.CREATED }).catch(() => {});

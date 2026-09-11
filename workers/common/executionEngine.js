@@ -98,6 +98,7 @@ function failureResult({
   return {
     status: "completed",
     verdict,
+    failureType: "user_code",
     passed,
     total,
     totalRuntime: Math.round(totalRuntime),
@@ -157,6 +158,13 @@ function createExecutionExecutor(config, dependencies = {}) {
           maxBuffer: MAX_OUTPUT_BUFFER_BYTES,
         });
 
+        if (compilation.infrastructureError) {
+          const error = new Error("Docker compilation execution failed");
+          error.code = "SANDBOX_EXEC_FAILED";
+          error.cause = compilation.infrastructureError;
+          throw error;
+        }
+
         if (compilation.timedOut || compilation.code !== 0) {
           result = failureResult({
             verdict: compilation.timedOut
@@ -215,6 +223,13 @@ function createExecutionExecutor(config, dependencies = {}) {
             maxBuffer: MAX_OUTPUT_BUFFER_BYTES,
           },
         );
+
+        if (batchResult.infrastructureError) {
+          const error = new Error("Docker execution failed");
+          error.code = "SANDBOX_EXEC_FAILED";
+          error.cause = batchResult.infrastructureError;
+          throw error;
+        }
 
         for (const testcase of currentBatch) {
           if (batchResult.timedOutTestCaseId === testcase.id) {

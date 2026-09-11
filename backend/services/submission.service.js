@@ -9,6 +9,7 @@ const QuestionRepository = require("../repositories/question.repository");
 const AppError = require("../errors/appError");
 const { validateSubmissionPayload, validateQuestionId } = require("../validators/request.validators");
 const { createSubmissionIdempotency } = require("./submissionIdempotency");
+const eventBus = require("../events/eventBus");
 
 async function createSubmission({ userId, questionId, language, code, idempotency = null }) {
   validateQuestionId(questionId);
@@ -44,6 +45,12 @@ async function createSubmission({ userId, questionId, language, code, idempotenc
       code,
       language: normalizedLang,
       status: SUBMISSION_STATUS.CREATED,
+    });
+    eventBus.emit("submission.created", {
+      submissionId: String(submission._id),
+      userId: String(userId),
+      questionId: String(questionId),
+      contestId: null,
     });
     try {
       await guard.publish({
@@ -100,6 +107,12 @@ async function createSubmission({ userId, questionId, language, code, idempotenc
     }
 
     await SubmissionRepository.updateStatus(submission._id, SUBMISSION_STATUS.QUEUED);
+    eventBus.emit("submission.queued", {
+      submissionId: String(submission._id),
+      userId: String(userId),
+      questionId: String(questionId),
+      contestId: null,
+    });
   } catch (error) {
     await SubmissionRepository.updateStatus(submission._id, SUBMISSION_STATUS.CREATED).catch(() => {});
 

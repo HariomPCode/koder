@@ -152,6 +152,7 @@ async function createWorker(queueName, processor) {
         await updateSubmission(job.data.submissionId, {
           status: "completed",
           verdict: isTLE ? "Time Limit Exceeded" : "Runtime Error",
+          failureType: "infrastructure",
           passed: 0,
           total: 0,
           totalRuntime: 0,
@@ -167,6 +168,13 @@ async function createWorker(queueName, processor) {
               err: projectionError,
             });
           },
+        });
+        logger.warn({
+          event: "submission_infrastructure_failure_tagged",
+          submissionId: String(job.data.submissionId),
+          failureType: "infrastructure",
+          errorCode: err?.code || "WORKER_EXECUTION_FAILED",
+          verdict: isTLE ? "Time Limit Exceeded" : "Runtime Error",
         });
       } catch (dbErr) {
         logger.error({

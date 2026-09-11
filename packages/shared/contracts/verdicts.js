@@ -24,7 +24,13 @@ const JUDGE_VERDICTS = Object.freeze({
   MEMORY_LIMIT_EXCEEDED: "Memory Limit Exceeded",
 });
 
+const FAILURE_TYPES = Object.freeze({
+  USER_CODE: "user_code",
+  INFRASTRUCTURE: "infrastructure",
+});
+
 module.exports = {
   SUBMISSION_STATUS,
   JUDGE_VERDICTS,
+  FAILURE_TYPES,
 };

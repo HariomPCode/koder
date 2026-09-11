@@ -4,6 +4,7 @@ const questionRoutes = require("./question.route");
 const submissionRoutes = require("./submission.route");
 const userRoutes = require("./user.route");
 const contestRoutes = require("./contest.route");
+const eventsRoutes = require("./events.route");
 
 const router = express.Router();
 
@@ -12,5 +13,6 @@ router.use("/user", userRoutes);
 router.use("/questions", questionRoutes);
 router.use("/submissions", submissionRoutes);
 router.use("/contests", contestRoutes);
+router.use("/events", eventsRoutes);
 
 module.exports = router;

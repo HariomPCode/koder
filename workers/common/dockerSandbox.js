@@ -205,6 +205,7 @@ class DockerSandbox {
             stderr: stderr || err.message,
             timedOut: false,
             runtimeMs,
+            infrastructureError: err,
           });
         }
       });
@@ -220,6 +221,10 @@ class DockerSandbox {
             stderr: stderr.trim(),
             timedOut,
             runtimeMs,
+            infrastructureError:
+              !timedOut && code !== 0 && /docker|daemon|container|cannot connect|no such file/i.test(stderr)
+                ? new Error(stderr.trim() || `Docker exec exited with code ${code}`)
+                : null,
           });
         }
       });
@@ -259,6 +264,7 @@ class DockerSandbox {
     let timedOutTestCaseId = null;
     let overallTimedOut = false;
     let crashedTestCaseId = null;
+    let infrastructureError = null;
 
     child.stderr.on("data", (chunk) => {
       if (stderr.length < maxBuffer) {
@@ -294,8 +300,11 @@ class DockerSandbox {
       }
     });
 
-    child.on("close", () => {
+    child.on("close", (code) => {
       isProcessExited = true;
+      if (code !== 0 && !infrastructureError && /docker|daemon|container|cannot connect|no such file/i.test(stderr)) {
+        infrastructureError = new Error(stderr.trim() || `Docker exec exited with code ${code}`);
+      }
       if (currentResponseResolver) {
         const resolver = currentResponseResolver;
         currentResponseResolver = null;
@@ -303,7 +312,8 @@ class DockerSandbox {
       }
     });
 
-    child.on("error", () => {
+    child.on("error", (error) => {
+      infrastructureError = error;
       isProcessExited = true;
       if (currentResponseResolver) {
         const resolver = currentResponseResolver;
@@ -437,6 +447,7 @@ class DockerSandbox {
       timedOutTestCaseId,
       overallTimedOut,
       crashedTestCaseId,
+      infrastructureError,
       stderr: stderr.trim(),
     };
   }

@@ -5,6 +5,7 @@ const {
 } = require("../services/contestLifecycle");
 const { createLogger } = require("@koder/shared");
 const defaultLogger = createLogger("backend.contest_scheduler");
+const eventBus = require("../events/eventBus");
 
 const CONTEST_SCHEDULER_INTERVAL_MS = 5 * 1000;
 const SCHEDULABLE_STATUSES = [
@@ -17,6 +18,7 @@ function createContestSchedulerRunner({
   ContestModel = Contest,
   now = () => Date.now(),
   logger = defaultLogger,
+  onRunning = null,
 } = {}) {
   if (!ContestModel || typeof ContestModel.find !== "function") {
     throw new TypeError("ContestModel.find is required");
@@ -46,6 +48,13 @@ function createContestSchedulerRunner({
         const modified = updateResult?.modifiedCount ?? updateResult?.nModified ?? 0;
         if (modified === 1) {
           result.transitioned += 1;
+          if (nextStatus === CONTEST_STATUS.RUNNING && onRunning) {
+            await onRunning(contest._id);
+          }
+          eventBus.emit("contest.lifecycle", {
+            contestId: String(contest._id),
+            status: nextStatus,
+          });
         }
       } catch (error) {
         result.failed += 1;
@@ -64,8 +73,12 @@ function createContestSchedulerRunner({
 function startContestScheduler({
   intervalMs = CONTEST_SCHEDULER_INTERVAL_MS,
   runner = null,
+  onRunning = null,
 } = {}) {
-  const run = runner || createContestSchedulerRunner();
+  const lifecycle = onRunning ? null : require("../services/contestLeaderboardLifecycle").createContestLeaderboardLifecycle();
+  const run = runner || createContestSchedulerRunner({
+    onRunning: onRunning || ((contestId) => lifecycle.preseedContest(contestId)),
+  });
   const timer = setInterval(() => {
     run().catch((error) => {
       defaultLogger.error({ event: "contest_lifecycle_sweep_failed", err: error });
@@ -80,6 +93,7 @@ function startContestScheduler({
     timer,
     async stop() {
       clearInterval(timer);
+      lifecycle?.stop?.();
     },
   };
 }
