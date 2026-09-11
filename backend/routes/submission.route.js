@@ -2,10 +2,11 @@ const express = require("express");
 const middleware = require("../middleware");
 const SubmissionService = require("../services/submission.service");
 const AppError = require("../errors/appError");
+const { practiceSubmissionRateLimit } = require("../middleware/rateLimit");
 
 const router = express.Router();
 
-router.post("/:questionId", middleware, async (req, res, next) => {
+router.post("/:questionId", middleware, practiceSubmissionRateLimit, async (req, res, next) => {
   try {
     const { language, code } = req.body;
     const userId = req.userId;

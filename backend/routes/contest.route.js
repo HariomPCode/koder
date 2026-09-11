@@ -2,6 +2,7 @@ const express = require("express");
 const ContestService = require("../services/contest.service");
 const middleware = require("../middleware");
 const AppError = require("../errors/appError");
+const { contestSubmissionRateLimit } = require("../middleware/rateLimit");
 
 const router = express.Router();
 
@@ -69,24 +70,29 @@ router.get("/:contestId/problems", middleware, async (req, res, next) => {
   }
 });
 
-router.post("/:contestId/submissions", middleware, async (req, res, next) => {
-  try {
-    const { contestId } = req.params;
-    const userId = req.userId;
-    const payload = req.body || {};
-    const result = await ContestService.createContestSubmission({
-      contestId,
-      userId,
-      payload,
-    });
-    return res.status(200).json(result);
-  } catch (error) {
-    if (error instanceof AppError) {
-      return res.status(error.statusCode).json({ message: error.message });
+router.post(
+  "/:contestId/submissions",
+  middleware,
+  contestSubmissionRateLimit,
+  async (req, res, next) => {
+    try {
+      const { contestId } = req.params;
+      const userId = req.userId;
+      const payload = req.body || {};
+      const result = await ContestService.createContestSubmission({
+        contestId,
+        userId,
+        payload,
+      });
+      return res.status(200).json(result);
+    } catch (error) {
+      if (error instanceof AppError) {
+        return res.status(error.statusCode).json({ message: error.message });
+      }
+      return next(error);
     }
-    return next(error);
-  }
-});
+  },
+);
 
 router.get("/:contestId/submissions", middleware, async (req, res, next) => {
   try {

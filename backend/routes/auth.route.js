@@ -1,11 +1,12 @@
 const express = require("express");
 const AuthService = require("../services/auth.service");
 const AppError = require("../errors/appError");
+const { authRateLimit } = require("../middleware/rateLimit");
 const router = express.Router();
 
 const authCookieOptions = AuthService.getAuthCookieOptions();
 
-router.post("/signup", async (req, res, next) => {
+router.post("/signup", authRateLimit, async (req, res, next) => {
   try {
     const { firstName, lastName, email, password } = req.body;
 
@@ -39,7 +40,7 @@ router.post("/signup", async (req, res, next) => {
   }
 });
 
-router.post("/signin", async (req, res, next) => {
+router.post("/signin", authRateLimit, async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
