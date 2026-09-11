@@ -7,6 +7,7 @@ const connectDB = require("./db");
 const createApp = require("./app");
 const { startLeaderboardProjectionSweep } = require("./jobs/leaderboardProjectionSweep");
 const { startSubmissionReconciliation } = require("./jobs/submissionReconciliation");
+const { startContestScheduler } = require("./jobs/contestScheduler");
 const app = createApp();
 
 async function startServer() {
@@ -17,6 +18,7 @@ async function startServer() {
   });
   startLeaderboardProjectionSweep();
   startSubmissionReconciliation();
+  startContestScheduler();
 }
 
 if (require.main === module) {

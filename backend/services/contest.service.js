@@ -17,16 +17,12 @@ const queue = require("../queue");
 const { validateSubmissionPayload } = require("../validators/request.validators");
 const ScoringReconcileService = require("./scoring-reconcile.service");
 const standingsService = require("./standings.service");
+const {
+  CONTEST_STATUS,
+  getNextContestLifecycleStatus,
+  normalizeContestStatus,
+} = require("./contestLifecycle");
 const { formatStanding, paginationResult } = standingsService;
-
-const CONTEST_STATUS = Object.freeze({
-  DRAFT: "DRAFT",
-  SCHEDULED: "SCHEDULED",
-  REGISTRATION: "REGISTRATION",
-  RUNNING: "RUNNING",
-  ENDED: "ENDED",
-  FINALIZED: "FINALIZED",
-});
 
 const VALID_TRANSITIONS = Object.freeze({
   [CONTEST_STATUS.DRAFT]: [CONTEST_STATUS.SCHEDULED],
@@ -36,10 +32,6 @@ const VALID_TRANSITIONS = Object.freeze({
   [CONTEST_STATUS.ENDED]: [CONTEST_STATUS.FINALIZED],
   [CONTEST_STATUS.FINALIZED]: [],
 });
-
-function normalizeContestStatus(status) {
-  return String(status || "").trim().toUpperCase();
-}
 
 function assertContestTransition(currentStatus, nextStatus) {
   const normalizedCurrent = normalizeContestStatus(currentStatus);
@@ -66,24 +58,7 @@ async function syncContestLifecycle(contest) {
     return contest;
   }
 
-  const now = Date.now();
-  const registrationOpenTime = contest.registrationOpenTime ? new Date(contest.registrationOpenTime).getTime() : null;
-  const startTime = contest.startTime ? new Date(contest.startTime).getTime() : null;
-  const endTime = contest.endTime ? new Date(contest.endTime).getTime() : null;
-
-  let nextStatus = normalizeContestStatus(contest.status);
-
-  if (nextStatus === CONTEST_STATUS.SCHEDULED && registrationOpenTime !== null && now >= registrationOpenTime) {
-    nextStatus = CONTEST_STATUS.REGISTRATION;
-  }
-
-  if (nextStatus === CONTEST_STATUS.REGISTRATION && startTime !== null && now >= startTime) {
-    nextStatus = CONTEST_STATUS.RUNNING;
-  }
-
-  if (nextStatus === CONTEST_STATUS.RUNNING && endTime !== null && now >= endTime) {
-    nextStatus = CONTEST_STATUS.ENDED;
-  }
+  const nextStatus = getNextContestLifecycleStatus(contest);
 
   if (nextStatus !== contest.status) {
     contest.status = nextStatus;
@@ -713,6 +688,7 @@ module.exports = {
   CONTEST_STATUS,
   VALID_TRANSITIONS,
   assertContestTransition,
+  getNextContestLifecycleStatus,
   syncContestLifecycle,
   getContestById,
   listContests,
