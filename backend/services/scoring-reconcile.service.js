@@ -15,6 +15,7 @@ const {
 const {
   enqueueLeaderboardProjection,
 } = require("../queue/leaderboardProjectionQueue");
+const { logger } = require("@koder/shared");
 
 const MUTABLE_CONTEST_STATUSES = new Set(["RUNNING", "ENDED"]);
 const AUDIT_ONLY_CONTEST_STATUS = "FINALIZED";
@@ -25,10 +26,13 @@ async function enqueueProjectionAfterRepair(contestId, userId) {
   try {
     await enqueueLeaderboardProjection({ contestId, userId });
   } catch (error) {
-    console.error(
-      `Leaderboard projection enqueue failed after reconciliation for contest ${contestId}, user ${userId}:`,
-      error?.message || error,
-    );
+    logger.error({
+      component: "backend.scoring_reconcile",
+      event: "leaderboard_projection_enqueue_failed",
+      contestId: String(contestId),
+      userId: String(userId),
+      err: error,
+    });
   }
 }
 

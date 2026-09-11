@@ -1,5 +1,7 @@
 const jwt = require("jsonwebtoken");
 const User = require("./models/User");
+const { createLogger } = require("@koder/shared");
+const logger = createLogger("backend.auth");
 
 async function authMiddleware(req, res, next) {
   const token = req.cookies?.auth_token;
@@ -16,7 +18,7 @@ async function authMiddleware(req, res, next) {
 
     next();
   } catch (error) {
-    console.error("JWT Verification Error:", error.message);
+    logger.warn({ event: "jwt_verification_failed", err: error });
     return res.status(403).json({ message: "Invalid or expired token" });
   }
 }

@@ -19,8 +19,16 @@ class ContestRepository {
     return Contest.findOne({ slug });
   }
 
-  async findAll() {
-    return Contest.find({}).sort({ startTime: -1 }).lean();
+  async findAll({ skip = 0, limit = 20 } = {}) {
+    return Contest.find({})
+      .sort({ startTime: -1, _id: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+  }
+
+  async countAll() {
+    return Contest.countDocuments({});
   }
 
   async findByIdAndUpdate(contestId, data, options = {}) {
@@ -43,8 +51,16 @@ class ContestRepository {
     return ContestParticipant.deleteOne({ contestId, userId });
   }
 
-  async listParticipants(contestId) {
-    return ContestParticipant.find({ contestId }).sort({ registeredAt: -1 }).lean();
+  async listParticipants(contestId, { skip = 0, limit = 50 } = {}) {
+    return ContestParticipant.find({ contestId })
+      .sort({ registeredAt: -1, _id: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+  }
+
+  async countParticipantsForList(contestId) {
+    return ContestParticipant.countDocuments({ contestId });
   }
 
   async countParticipants(contestId) {
@@ -111,12 +127,24 @@ class ContestRepository {
     return ContestParticipant.countDocuments(aheadFilter);
   }
 
-  async listSubmissions(contestId, userId = null) {
+  async listSubmissions(contestId, userId = null, { skip = 0, limit = 50 } = {}) {
     const criteria = { contestId };
     if (userId) {
       criteria.userId = userId;
     }
-    return Submission.find(criteria).sort({ createdAt: -1 }).lean();
+    return Submission.find(criteria)
+      .sort({ createdAt: -1, _id: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+  }
+
+  async countSubmissions(contestId, userId = null) {
+    const criteria = { contestId };
+    if (userId) {
+      criteria.userId = userId;
+    }
+    return Submission.countDocuments(criteria);
   }
 
   async createSubmission(data) {

@@ -1,4 +1,6 @@
 const SubmissionRepository = require("../repositories/submission.repository");
+const { createLogger } = require("@koder/shared");
+const defaultLogger = createLogger("backend.submission_reconciliation");
 
 const RECONCILIATION_INTERVAL_MS = 30 * 1000;
 const STALE_SUBMISSION_AGE_MS = 10 * 1000;
@@ -10,7 +12,7 @@ function createReconciliationRunner({
   staleAfterMs = STALE_SUBMISSION_AGE_MS,
   batchSize = DEFAULT_BATCH_SIZE,
   now = () => Date.now(),
-  logger = console,
+  logger = defaultLogger,
 } = {}) {
   if (!repository || typeof repository.findStaleCreatedSubmissions !== "function") {
     throw new TypeError("repository.findStaleCreatedSubmissions is required");
@@ -34,19 +36,24 @@ function createReconciliationRunner({
 
     for (const submission of submissions) {
       try {
-        await enqueue({
+        const enqueuePayload = {
           submissionId: submission._id,
           language: submission.language,
           userId: submission.userId,
           questionId: submission.questionId,
-        });
+        };
+        if (submission.contestId !== undefined) {
+          enqueuePayload.contestId = submission.contestId;
+        }
+        await enqueue(enqueuePayload);
         result.recovered += 1;
       } catch (error) {
         result.failed += 1;
-        logger.error(
-          `Submission reconciliation failed for ${submission._id}:`,
-          error?.message || error,
-        );
+        logger.error({
+          event: "submission_reconciliation_failed",
+          submissionId: String(submission._id),
+          err: error,
+        });
       }
     }
 
@@ -61,12 +68,12 @@ function startSubmissionReconciliation({
   const run = runner || createReconciliationRunner();
   const timer = setInterval(() => {
     run().catch((error) => {
-      console.error("Submission reconciliation failed:", error?.message || error);
+      defaultLogger.error({ event: "submission_reconciliation_sweep_failed", err: error });
     });
   }, intervalMs);
   timer.unref?.();
   run().catch((error) => {
-    console.error("Submission startup reconciliation failed:", error?.message || error);
+    defaultLogger.error({ event: "submission_startup_reconciliation_failed", err: error });
   });
 
   return {

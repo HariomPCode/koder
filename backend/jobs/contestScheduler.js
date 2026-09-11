@@ -3,6 +3,8 @@ const {
   CONTEST_STATUS,
   getNextContestLifecycleStatus,
 } = require("../services/contestLifecycle");
+const { createLogger } = require("@koder/shared");
+const defaultLogger = createLogger("backend.contest_scheduler");
 
 const CONTEST_SCHEDULER_INTERVAL_MS = 5 * 1000;
 const SCHEDULABLE_STATUSES = [
@@ -14,7 +16,7 @@ const SCHEDULABLE_STATUSES = [
 function createContestSchedulerRunner({
   ContestModel = Contest,
   now = () => Date.now(),
-  logger = console,
+  logger = defaultLogger,
 } = {}) {
   if (!ContestModel || typeof ContestModel.find !== "function") {
     throw new TypeError("ContestModel.find is required");
@@ -47,10 +49,11 @@ function createContestSchedulerRunner({
         }
       } catch (error) {
         result.failed += 1;
-        logger.error(
-          `Contest lifecycle transition failed for ${contest._id}:`,
-          error?.message || error,
-        );
+        logger.error({
+          event: "contest_lifecycle_transition_failed",
+          contestId: String(contest._id),
+          err: error,
+        });
       }
     }
 
@@ -65,12 +68,12 @@ function startContestScheduler({
   const run = runner || createContestSchedulerRunner();
   const timer = setInterval(() => {
     run().catch((error) => {
-      console.error("Contest lifecycle scheduler failed:", error?.message || error);
+      defaultLogger.error({ event: "contest_lifecycle_sweep_failed", err: error });
     });
   }, intervalMs);
   timer.unref?.();
   run().catch((error) => {
-    console.error("Contest startup lifecycle sweep failed:", error?.message || error);
+    defaultLogger.error({ event: "contest_startup_lifecycle_sweep_failed", err: error });
   });
 
   return {

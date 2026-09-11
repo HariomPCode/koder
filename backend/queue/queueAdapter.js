@@ -6,6 +6,7 @@ const {
   getRedisConfig,
   buildQueueJobId,
   createQueueJobOptions,
+  QUEUE_PRIORITY,
   QUEUE_STALL_DEFAULTS,
 } = require("@koder/shared");
 const AppError = require("../errors/appError");
@@ -39,7 +40,13 @@ function isHealthy() {
   return Boolean(connection) && ["ready", "connecting"].includes(connection.status);
 }
 
-async function enqueueSubmission({ submissionId, language, userId, questionId }) {
+async function enqueueSubmission({
+  submissionId,
+  language,
+  userId,
+  questionId,
+  contestId = null,
+}) {
   const normalizedLanguage = String(language || "").toLowerCase();
   const queue = queueMap[normalizedLanguage];
 
@@ -59,7 +66,9 @@ async function enqueueSubmission({ submissionId, language, userId, questionId })
   try {
     const job = await queue.add(JOB_NAMES.EXECUTE, payload, {
       jobId,
-      ...createQueueJobOptions(),
+      ...createQueueJobOptions({
+        priority: contestId ? QUEUE_PRIORITY.contest : QUEUE_PRIORITY.practice,
+      }),
     });
 
     if (job) {
@@ -97,7 +106,13 @@ async function enqueueSubmission({ submissionId, language, userId, questionId })
   }
 }
 
-async function ensureSubmissionEnqueued({ submissionId, language, userId, questionId }) {
+async function ensureSubmissionEnqueued({
+  submissionId,
+  language,
+  userId,
+  questionId,
+  contestId = null,
+}) {
   const normalizedLanguage = String(language || "").toLowerCase();
   const queue = queueMap[normalizedLanguage];
 
@@ -116,7 +131,7 @@ async function ensureSubmissionEnqueued({ submissionId, language, userId, questi
     return existingJob;
   }
 
-  return enqueueSubmission({ submissionId, language, userId, questionId });
+  return enqueueSubmission({ submissionId, language, userId, questionId, contestId });
 }
 
 module.exports = {

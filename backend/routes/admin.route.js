@@ -19,6 +19,8 @@ const { Contest, ContestParticipant } = require("@koder/shared");
 const {
   createLeaderboardRetentionService,
 } = require("../services/leaderboard-retention.service");
+const UserRepository = require("../repositories/user.repository");
+const { parsePagination, paginationResult } = require("../utils/pagination");
 
 
 const router = express.Router();
@@ -57,9 +59,15 @@ router.use(adminMiddleware);
 
 router.get("/users", async (req, res, next) => {
   try {
-    const users = await User.find({}).select({ password: 0 });
-
-    return res.json({ users });
+    const paging = parsePagination(req.query, { defaultLimit: 50 });
+    const [users, total] = await Promise.all([
+      UserRepository.findAll(paging),
+      UserRepository.countAll(),
+    ]);
+    return res.json({
+      users,
+      pagination: paginationResult({ ...paging, total }),
+    });
   } catch (error) {
     return next(error);
   }
@@ -231,7 +239,7 @@ router.delete("/questions/:questionId", async (req, res, next) => {
 
 router.get("/contests", async (req, res, next) => {
   try {
-    const result = await ContestService.listContests();
+    const result = await ContestService.listContests(req.query);
     return res.json(result);
   } catch (error) {
     return next(error);

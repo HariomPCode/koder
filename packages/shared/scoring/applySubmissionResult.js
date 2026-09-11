@@ -15,6 +15,8 @@ const {
   calculateProblemPenalty,
   compareCanonicalSubmissionOrder,
 } = require("../contracts/scoring");
+const { createLogger } = require("../logger");
+const logger = createLogger("shared.scoring");
 
 const CONTEST_SCORING_ELIGIBLE_STATUSES = new Set(["RUNNING", "ENDED"]);
 
@@ -294,9 +296,11 @@ async function applySubmissionResult(submissionId, options = {}) {
   }
 
   if (contest.status === "FINALIZED") {
-    console.warn(
-      `Scoring attempt on FINALIZED contest ${contest._id} for submission ${submission._id} ignored`,
-    );
+    logger.warn({
+      event: "scoring_ignored_finalized_contest",
+      contestId: String(contest._id),
+      submissionId: String(submission._id),
+    });
     return { processed: false, reason: "contest_finalized", contestStatus: contest.status };
   }
 
@@ -309,9 +313,11 @@ async function applySubmissionResult(submissionId, options = {}) {
     pendingSubmissionIds: submission._id,
   });
   if (isForceExcluded) {
-    console.warn(
-      `Scoring attempt on force-excluded submission ${submission._id} for contest ${submission.contestId} ignored`,
-    );
+    logger.warn({
+      event: "scoring_ignored_force_excluded_submission",
+      submissionId: String(submission._id),
+      contestId: String(submission.contestId),
+    });
     return { processed: false, reason: "submission_force_excluded", contestStatus: contest.status };
   }
 

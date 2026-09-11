@@ -1,4 +1,6 @@
 const fs = require("fs");
+const { createLogger } = require("@koder/shared");
+const logger = createLogger("worker.sandbox");
 
 function cleanupSandbox(jobDir) {
   try {
@@ -7,7 +9,7 @@ function cleanupSandbox(jobDir) {
       force: true,
     });
   } catch (err) {
-    console.error("Failed to clean up sandbox:", err);
+    logger.error({ event: "sandbox_directory_cleanup_failed", err });
   }
 }
 

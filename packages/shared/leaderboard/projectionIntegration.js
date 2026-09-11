@@ -1,4 +1,6 @@
 let projectionEnqueuer = null;
+const { createLogger } = require("../logger");
+const logger = createLogger("shared.leaderboard");
 
 function setLeaderboardProjectionEnqueuer(enqueuer) {
   if (enqueuer !== null && typeof enqueuer !== "function") {
@@ -16,10 +18,12 @@ async function enqueueLeaderboardProjectionIfConfigured({ contestId, userId }) {
     await projectionEnqueuer({ contestId, userId });
     return { enqueued: true };
   } catch (error) {
-    console.error(
-      `Leaderboard projection enqueue failed for contest ${contestId}, user ${userId}:`,
-      error?.message || error,
-    );
+    logger.error({
+      event: "leaderboard_projection_enqueue_failed",
+      contestId: String(contestId),
+      userId: String(userId),
+      err: error,
+    });
     return { enqueued: false, reason: "enqueue_failed", error };
   }
 }

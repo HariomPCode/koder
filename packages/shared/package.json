@@ -4,6 +4,7 @@
   "main": "index.js",
   "license": "ISC",
   "dependencies": {
-    "mongoose": "^9.7.3"
+    "mongoose": "^9.7.3",
+    "pino": "^10.3.1"
   }
 }

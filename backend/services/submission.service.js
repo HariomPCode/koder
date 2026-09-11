@@ -1,4 +1,8 @@
-const { SUBMISSION_STATUS } = require("@koder/shared");
+const {
+  SUBMISSION_STATUS,
+  createQueueJobOptions,
+  QUEUE_PRIORITY,
+} = require("@koder/shared");
 const queue = require("../queue");
 const SubmissionRepository = require("../repositories/submission.repository");
 const QuestionRepository = require("../repositories/question.repository");
@@ -66,6 +70,7 @@ async function createSubmission({ userId, questionId, language, code, idempotenc
         language: normalizedLang,
         userId,
         questionId,
+        contestId: null,
       });
     } else {
       const compatibilityQueueMap = {
@@ -83,11 +88,15 @@ async function createSubmission({ userId, questionId, language, code, idempotenc
         throw AppError.badRequest(`No queue configured for language: ${normalizedLang}`);
       }
 
-      await targetQueue.add("execute", {
-        submissionId: submission._id,
-        userId,
-        questionId,
-      });
+      await targetQueue.add(
+        "execute",
+        {
+          submissionId: submission._id,
+          userId,
+          questionId,
+        },
+        createQueueJobOptions({ priority: QUEUE_PRIORITY.practice }),
+      );
     }
 
     await SubmissionRepository.updateStatus(submission._id, SUBMISSION_STATUS.QUEUED);

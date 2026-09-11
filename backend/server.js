@@ -8,13 +8,15 @@ const createApp = require("./app");
 const { startLeaderboardProjectionSweep } = require("./jobs/leaderboardProjectionSweep");
 const { startSubmissionReconciliation } = require("./jobs/submissionReconciliation");
 const { startContestScheduler } = require("./jobs/contestScheduler");
+const { createLogger } = require("@koder/shared");
+const logger = createLogger("backend.server");
 const app = createApp();
 
 async function startServer() {
   await connectDB();
 
   app.listen(5000, () => {
-    console.log("Server is running on port 5000");
+    logger.info({ event: "server_listening", port: 5000 });
   });
   startLeaderboardProjectionSweep();
   startSubmissionReconciliation();

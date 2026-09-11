@@ -24,6 +24,11 @@ const QUEUE_RETRY_DEFAULTS = Object.freeze({
   },
 });
 
+const QUEUE_PRIORITY = Object.freeze({
+  contest: 1,
+  practice: 10,
+});
+
 const QUEUE_RETENTION_DEFAULTS = Object.freeze({
   completed: {
     age: 24 * 60 * 60,
@@ -52,6 +57,11 @@ const DEFAULT_WORKER_CONCURRENCY = Object.freeze({
   javascript: 1,
   java: 1,
   python: 1,
+});
+
+const DEFAULT_ORPHAN_CLEANUP = Object.freeze({
+  intervalMs: 60 * 1000,
+  maxAgeMs: 5 * 60 * 1000,
 });
 
 function parsePositiveInt(value, fallback) {
@@ -108,13 +118,26 @@ function getWorkerConcurrencyConfig(language) {
   };
 }
 
+function getOrphanCleanupConfig() {
+  return {
+    intervalMs: parsePositiveInt(
+      process.env.KODER_ORPHAN_SWEEP_INTERVAL_MS,
+      DEFAULT_ORPHAN_CLEANUP.intervalMs,
+    ),
+    maxAgeMs: parsePositiveInt(
+      process.env.KODER_ORPHAN_MAX_AGE_MS,
+      DEFAULT_ORPHAN_CLEANUP.maxAgeMs,
+    ),
+  };
+}
+
 function buildQueueJobId(language, submissionId) {
   const normalizedLanguage = String(language || "").trim().toLowerCase();
   return `${normalizedLanguage}-${String(submissionId)}`;
 }
 
 function createQueueJobOptions(overrides = {}) {
-  return {
+  const options = {
     attempts: overrides.attempts ?? QUEUE_RETRY_DEFAULTS.attempts,
     backoff: {
       ...QUEUE_RETRY_DEFAULTS.backoff,
@@ -129,6 +152,12 @@ function createQueueJobOptions(overrides = {}) {
       count: QUEUE_RETENTION_DEFAULTS.failed.count,
     },
   };
+
+  if (overrides.priority !== undefined) {
+    options.priority = overrides.priority;
+  }
+
+  return options;
 }
 
 module.exports = {
@@ -137,13 +166,16 @@ module.exports = {
   LEADERBOARD_PROJECTION_QUEUE_NAME,
   LEADERBOARD_PROJECTION_JOB_NAME,
   QUEUE_RETRY_DEFAULTS,
+  QUEUE_PRIORITY,
   QUEUE_RETENTION_DEFAULTS,
   QUEUE_STALL_DEFAULTS,
   DEFAULT_HOST_CAPACITY,
   DEFAULT_WORKER_CONCURRENCY,
+  DEFAULT_ORPHAN_CLEANUP,
   getRedisConfig,
   getHostCapacityConfig,
   getWorkerConcurrencyConfig,
+  getOrphanCleanupConfig,
   buildQueueJobId,
   createQueueJobOptions,
 };

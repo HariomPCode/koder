@@ -1,11 +1,13 @@
 const mongoose = require("mongoose");
+const { createLogger } = require("@koder/shared");
+const logger = createLogger("backend.db");
 
 async function connectDB() {
   try {
     await mongoose.connect(process.env.MONGODB_URI);
-    console.log("MongoDB connected successfully");
+    logger.info({ event: "mongodb_connected" });
   } catch (error) {
-    console.error("error connecting mongodb", error);
+    logger.error({ event: "mongodb_connection_failed", err: error });
   }
 }
 

@@ -13,12 +13,15 @@ const {
   markSubmissionRunning,
   QUEUE_STALL_DEFAULTS,
   getWorkerConcurrencyConfig,
+  getOrphanCleanupConfig,
+  createLogger,
 } = require("@koder/shared");
 const {
   reserveExecutionSlot,
   releaseExecutionSlot,
 } = require("./hostCapacity");
 const cleanupOrphanContainers = require("./orphanContainerCleanup");
+const startPeriodicOrphanCleanup = require("./periodicOrphanCleanup");
 const connectDB = require("./db");
 const {
   enqueueLeaderboardProjection,
@@ -27,6 +30,7 @@ const {
 const { setLeaderboardProjectionEnqueuer } = require("@koder/shared");
 
 setLeaderboardProjectionEnqueuer(enqueueLeaderboardProjection);
+const logger = createLogger("worker.execution");
 
 function createCapacityGuard(queueName, wrappedProcessor) {
   return async function guardedProcessor(job) {
@@ -47,7 +51,10 @@ function createCapacityGuard(queueName, wrappedProcessor) {
       if (submissionId) {
         const runningDocument = await markSubmissionRunning(submissionId);
         if (!runningDocument) {
-          console.log(`Skipping RUNNING update for terminal submission ${submissionId}`);
+          logger.info({
+            event: "submission_running_update_skipped",
+            submissionId: String(submissionId),
+          });
         }
       }
 
@@ -60,11 +67,24 @@ function createCapacityGuard(queueName, wrappedProcessor) {
 
 async function createWorker(queueName, processor) {
   await connectDB();
-  await cleanupOrphanContainers().catch((error) => {
-    console.warn(`Orphan cleanup skipped for ${queueName}:`, error?.message || error);
+  const activeJobIds = new Set();
+  const orphanCleanupConfig = getOrphanCleanupConfig();
+  await cleanupOrphanContainers({
+    activeJobIds,
+    maxAgeMs: orphanCleanupConfig.maxAgeMs,
+  }).catch((error) => {
+    logger.warn({ event: "orphan_cleanup_startup_skipped", queue: queueName, err: error });
+  });
+  const orphanCleanupTimer = startPeriodicOrphanCleanup({
+    activeJobIds,
+    intervalMs: orphanCleanupConfig.intervalMs,
+    maxAgeMs: orphanCleanupConfig.maxAgeMs,
+    onError: (error) => {
+      logger.warn({ event: "periodic_orphan_cleanup_failed", err: error });
+    },
   });
 
-  console.log(`Worker connected to MongoDB`);
+  logger.info({ event: "worker_mongodb_ready", queue: queueName });
 
   const connection = new IoRedis(getRedisConfig());
   const capacityConfig = getWorkerConcurrencyConfig(queueName);
@@ -79,18 +99,52 @@ async function createWorker(queueName, processor) {
   });
 
   worker.on("active", (job) => {
-    console.log(`Worker ${queueName} accepted job ${job?.id} (${job?.data?.submissionId || "n/a"})`);
+    activeJobIds.add(String(job?.id));
+  });
+  worker.on("completed", (job) => {
+    activeJobIds.delete(String(job?.id));
+  });
+  worker.on("failed", (job) => {
+    activeJobIds.delete(String(job?.id));
+  });
+
+  worker.on("active", (job) => {
+    logger.info({
+      event: "job_started",
+      queue: queueName,
+      jobId: String(job?.id || ""),
+      submissionId: job?.data?.submissionId ? String(job.data.submissionId) : undefined,
+      attempt: job?.attemptsMade ?? 0,
+    });
   });
 
   worker.on("completed", (job, result) => {
-    console.log(`Worker ${queueName} completed job ${job?.id} for submission ${job?.data?.submissionId || "n/a"}`);
+    logger.info({
+      event: "job_completed",
+      queue: queueName,
+      jobId: String(job?.id || ""),
+      submissionId: job?.data?.submissionId ? String(job.data.submissionId) : undefined,
+      attempt: job?.attemptsMade ?? 0,
+    });
     if (result && result.status === "already-completed") {
-      console.log(`Job ${job?.id} was skipped because the submission was already terminal.`);
+      logger.info({
+        event: "job_skipped_terminal_submission",
+        queue: queueName,
+        jobId: String(job?.id || ""),
+        submissionId: job?.data?.submissionId ? String(job.data.submissionId) : undefined,
+      });
     }
   });
 
   worker.on("failed", async (job, err) => {
-    console.error(`Job ${job?.id} failed with error:`, err?.message || err);
+    logger.error({
+      event: "job_failed",
+      queue: queueName,
+      jobId: String(job?.id || ""),
+      submissionId: job?.data?.submissionId ? String(job.data.submissionId) : undefined,
+      attempt: job?.attemptsMade ?? 0,
+      err,
+    });
     if (job?.data?.submissionId) {
       try {
         const isTLE =
@@ -107,50 +161,61 @@ async function createWorker(queueName, processor) {
           errorMessage: err?.message || "Execution failed",
         }, {
           onProjectionFailure: (projectionError) => {
-            console.error(
-              `Leaderboard projection enqueue failed after submission ${job.data.submissionId}:`,
-              projectionError?.message || projectionError,
-            );
+            logger.error({
+              event: "leaderboard_projection_enqueue_failed",
+              submissionId: String(job.data.submissionId),
+              err: projectionError,
+            });
           },
         });
       } catch (dbErr) {
-        console.error("Failed to update submission on job failure:", dbErr);
+        logger.error({
+          event: "submission_failure_update_failed",
+          submissionId: String(job.data.submissionId),
+          err: dbErr,
+        });
       }
     }
   });
 
   worker.on("error", (err) => {
-    console.error(`Worker error on ${queueName}:`, err);
+    logger.error({ event: "worker_error", queue: queueName, err });
   });
 
   const shutdown = async (signal) => {
     try {
-      console.log(`Shutting down ${queueName} worker on ${signal}...`);
+      logger.info({ event: "worker_shutdown_started", queue: queueName, signal });
+      await orphanCleanupTimer.stop();
       await worker.close();
       await closeLeaderboardProjectionProducer();
       await connection.quit();
       process.exit(0);
     } catch (error) {
-      console.error(`Error during ${queueName} shutdown:`, error);
+      logger.error({ event: "worker_shutdown_failed", queue: queueName, signal, err: error });
       process.exit(1);
     }
   };
 
   process.once("SIGTERM", () => {
     shutdown("SIGTERM").catch((error) => {
-      console.error("SIGTERM shutdown failed:", error);
+      logger.error({ event: "sigterm_shutdown_failed", queue: queueName, err: error });
       process.exit(1);
     });
   });
 
   process.once("SIGINT", () => {
     shutdown("SIGINT").catch((error) => {
-      console.error("SIGINT shutdown failed:", error);
+      logger.error({ event: "sigint_shutdown_failed", queue: queueName, err: error });
       process.exit(1);
     });
   });
 
-  console.log(`Worker listening on ${queueName} with concurrency=${capacityConfig.effectiveConcurrency}; host budget=${capacityConfig.hostMaxActiveJobs}`);
+  logger.info({
+    event: "worker_listening",
+    queue: queueName,
+    concurrency: capacityConfig.effectiveConcurrency,
+    hostMaxActiveJobs: capacityConfig.hostMaxActiveJobs,
+  });
 
   return worker;
 }

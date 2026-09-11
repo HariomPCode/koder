@@ -12,25 +12,18 @@ async function getProfile(userId) {
 }
 
 async function getUserStats(userId) {
-  const submissions = await SubmissionRepository.findByUserId(userId);
-  const totalSubmissions = submissions.length;
-
-  const solvedQuestions = new Set();
-  const attemptedQuestions = new Set();
-  let acceptedSubmissions = 0;
-
-  for (const submission of submissions) {
-    attemptedQuestions.add(submission.questionId.toString());
-    if (submission.verdict === "Accepted") {
-      solvedQuestions.add(submission.questionId.toString());
-      acceptedSubmissions++;
-    }
-  }
+  const [summary, activityDays, recentSubmissions, recentlySolvedRows] = await Promise.all([
+    SubmissionRepository.getUserStatsSummary(userId),
+    SubmissionRepository.getUserActivityDays(userId),
+    SubmissionRepository.findRecentForStats(userId, 5),
+    SubmissionRepository.findRecentlySolvedForStats(userId, 5),
+  ]);
+  const totalSubmissions = summary.totalSubmissions;
+  const acceptedSubmissions = summary.acceptedSubmissions;
+  const solvedQuestions = new Set(summary.solvedQuestionIds.map((id) => String(id)));
+  const attemptedQuestions = new Set(summary.attemptedQuestionIds.map((id) => String(id)));
 
   const questions = await QuestionRepository.findAllForStats();
-  const questionsById = new Map(
-    questions.map((question) => [question._id.toString(), question]),
-  );
 
   let solvedEasyQuestions = 0;
   let solvedMediumQuestions = 0;
@@ -60,7 +53,15 @@ async function getUserStats(userId) {
     ? 0
     : Number(((acceptedSubmissions / totalSubmissions) * 100).toFixed(2));
 
-  const recentSubmissions = submissions.slice(0, 5).flatMap((submission) => {
+  const recentQuestionIds = new Set(recentSubmissions.map((submission) => String(submission.questionId)));
+  const recentlySolvedQuestionIds = recentlySolvedRows.map((row) => String(row._id));
+  const questionIds = [...new Set([...recentQuestionIds, ...recentlySolvedQuestionIds])];
+  const recentQuestions = questions.filter((question) => questionIds.includes(String(question._id)));
+  const questionsById = new Map(
+    recentQuestions.map((question) => [question._id.toString(), question]),
+  );
+
+  const recentSubmissionResults = recentSubmissions.flatMap((submission) => {
     const question = questionsById.get(submission.questionId.toString());
     if (!question) return [];
     return [{
@@ -77,26 +78,19 @@ async function getUserStats(userId) {
   });
 
   const recentlySolved = [];
-  const recentSolvedIds = new Set();
-  for (const submission of submissions) {
-    if (submission.verdict !== "Accepted") continue;
-    const questionId = submission.questionId.toString();
-    if (recentSolvedIds.has(questionId)) continue;
+  for (const row of recentlySolvedRows) {
+    const questionId = String(row._id);
     const question = questionsById.get(questionId);
     if (!question) continue;
-    recentSolvedIds.add(questionId);
     recentlySolved.push({
       title: question.title,
       slug: question.slug,
       difficulty: question.difficulty,
-      solvedAt: submission.createdAt,
+      solvedAt: row.solvedAt,
     });
-    if (recentlySolved.length === 5) break;
   }
 
-  const submissionDays = [...new Set(
-    submissions.map((submission) => submission.createdAt.toISOString().slice(0, 10)),
-  )].sort().reverse();
+  const submissionDays = activityDays.map((row) => row._id);
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
   const dayDifference = (from, to) => Math.round((from - to) / 86400000);
@@ -130,15 +124,9 @@ async function getUserStats(userId) {
 
   const weekStart = new Date(today);
   weekStart.setUTCDate(weekStart.getUTCDate() - 6);
-  const weeklySubmissions = submissions.filter((submission) => submission.createdAt >= weekStart);
-  const weeklySolved = new Set(
-    weeklySubmissions
-      .filter((submission) => submission.verdict === "Accepted")
-      .map((submission) => submission.questionId.toString()),
-  ).size;
-  const weeklyAttempted = new Set(
-    weeklySubmissions.map((submission) => submission.questionId.toString()),
-  ).size;
+  const weeklyStats = await SubmissionRepository.getWeeklyStats(userId, weekStart);
+  const weeklySolved = weeklyStats.solvedQuestionIds.length;
+  const weeklyAttempted = weeklyStats.attemptedQuestionIds.length;
 
   const recommendationOrder = ["Easy", "Medium", "Hard"];
   const recommendedQuestion = recommendationOrder
@@ -158,12 +146,12 @@ async function getUserStats(userId) {
     solvedMediumQuestions,
     solvedHardQuestions,
     availableByDifficulty,
-    recentSubmissions,
+    recentSubmissions: recentSubmissionResults,
     recentlySolved,
     activity: {
       currentStreak,
       longestStreak,
-      lastActive: submissions[0]?.createdAt || null,
+      lastActive: recentSubmissions[0]?.createdAt || null,
       weeklySolved,
       weeklyAttempted,
     },

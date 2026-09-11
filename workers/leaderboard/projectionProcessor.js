@@ -8,7 +8,9 @@ const {
   encodeParticipant,
   normalizeContestId,
   normalizeObjectId,
+  createLogger,
 } = require("@koder/shared");
+const logger = createLogger("worker.leaderboard_projection");
 
 const LIVE_CONTEST_STATUSES = new Set(["RUNNING", "ENDED"]);
 
@@ -113,9 +115,12 @@ function createProjectionProcessor({
       String(now()),
     );
 
-    console.log(
-      `Leaderboard projection refreshed for contest ${contestId}, user ${userId}, generation ${generation}`,
-    );
+    logger.info({
+      event: "leaderboard_projection_refreshed",
+      contestId,
+      userId,
+      generation,
+    });
     return {
       processed: true,
       contestId,

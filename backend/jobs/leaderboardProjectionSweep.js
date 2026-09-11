@@ -16,6 +16,8 @@ const {
 const {
   createLeaderboardRetentionService,
 } = require("../services/leaderboard-retention.service");
+const { createLogger } = require("@koder/shared");
+const defaultLogger = createLogger("backend.leaderboard_sweep");
 
 const SWEEP_INTERVAL_MS = 60 * 1000;
 const SWEEP_LOCK_TTL_MS = 55 * 1000;
@@ -75,7 +77,7 @@ function createDefaultSweepRunner() {
       try {
         retentionResult = await retention.cleanupDueContests(options);
       } catch (error) {
-        console.error("Leaderboard retention cleanup failed:", error.message || error);
+        defaultLogger.error({ event: "leaderboard_retention_cleanup_failed", err: error });
       }
       return { ...projectionResult, retention: retentionResult };
     },
@@ -92,12 +94,12 @@ function startLeaderboardProjectionSweep({
   const run = runner || owned.runSweep;
   const timer = setInterval(() => {
     run().catch((error) => {
-      console.error("Leaderboard projection sweep failed:", error.message || error);
+      defaultLogger.error({ event: "leaderboard_projection_sweep_failed", err: error });
     });
   }, intervalMs);
   timer.unref?.();
   run().catch((error) => {
-    console.error("Leaderboard projection startup sweep failed:", error.message || error);
+    defaultLogger.error({ event: "leaderboard_projection_startup_sweep_failed", err: error });
   });
   return {
     timer,

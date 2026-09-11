@@ -11,9 +11,11 @@ const {
   QUEUE_STALL_DEFAULTS,
   createQueueJobOptions,
   getRedisConfig,
+  createLogger,
 } = require("@koder/shared");
 const connectDB = require("../common/db");
 const { createProjectionProcessor } = require("./projectionProcessor");
+const logger = createLogger("worker.leaderboard");
 
 async function start() {
   await connectDB();
@@ -28,44 +30,48 @@ async function start() {
   });
 
   worker.on("active", (job) => {
-    console.log(`Leaderboard projection job started: ${job.id}`);
+    logger.info({ event: "leaderboard_job_started", jobId: String(job.id), attempt: job.attemptsMade ?? 0 });
   });
   worker.on("completed", (job, result) => {
-    console.log(`Leaderboard projection job completed: ${job.id}`, result);
+    logger.info({ event: "leaderboard_job_completed", jobId: String(job.id), result });
   });
   worker.on("failed", (job, error) => {
-    console.error(
-      `Leaderboard projection job failed: ${job?.id || "unknown"} attempt=${job?.attemptsMade || 0}:`,
-      error?.message || error,
-    );
+    logger.error({
+      event: "leaderboard_job_failed",
+      jobId: String(job?.id || "unknown"),
+      attempt: job?.attemptsMade ?? 0,
+      err: error,
+    });
   });
   worker.on("error", (error) => {
-    console.error("Leaderboard projection worker error:", error);
+    logger.error({ event: "leaderboard_worker_error", err: error });
   });
 
   const shutdown = async (signal) => {
     try {
-      console.log(`Shutting down leaderboard projection worker on ${signal}...`);
+      logger.info({ event: "leaderboard_worker_shutdown_started", signal });
       await worker.close(true);
       await connection.quit();
       process.exit(0);
     } catch (error) {
-      console.error("Leaderboard projection worker shutdown failed:", error);
+      logger.error({ event: "leaderboard_worker_shutdown_failed", signal, err: error });
       process.exit(1);
     }
   };
 
   process.once("SIGTERM", () => shutdown("SIGTERM"));
   process.once("SIGINT", () => shutdown("SIGINT"));
-  console.log(
-    `Worker listening on ${LEADERBOARD_PROJECTION_QUEUE_NAME} for ${LEADERBOARD_PROJECTION_JOB_NAME}`,
-  );
+  logger.info({
+    event: "leaderboard_worker_listening",
+    queue: LEADERBOARD_PROJECTION_QUEUE_NAME,
+    jobName: LEADERBOARD_PROJECTION_JOB_NAME,
+  });
   return worker;
 }
 
 if (require.main === module) {
   start().catch((error) => {
-    console.error("Failed to start leaderboard projection worker:", error);
+    logger.error({ event: "leaderboard_worker_start_failed", err: error });
     process.exit(1);
   });
 }

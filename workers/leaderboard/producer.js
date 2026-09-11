@@ -7,6 +7,8 @@ const {
   createQueueJobOptions,
   getRedisConfig,
 } = require("@koder/shared");
+const { createLogger } = require("@koder/shared");
+const logger = createLogger("worker.leaderboard_queue");
 
 let connection = null;
 let queue = null;
@@ -44,9 +46,12 @@ function createLeaderboardProjectionEnqueuer({ queue: providedQueue = null } = {
       ),
       "Leaderboard projection enqueue",
     );
-    console.log(
-      `Leaderboard projection job enqueued for contest ${payload.contestId}, user ${payload.userId} (${job.id})`,
-    );
+    logger.info({
+      event: "leaderboard_projection_job_enqueued",
+      contestId: payload.contestId,
+      userId: payload.userId,
+      jobId: String(job.id),
+    });
     return job;
   };
 }

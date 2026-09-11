@@ -1,6 +1,8 @@
 const Submission = require("../models/Submission");
 const Question = require("../models/Question");
 const { SUBMISSION_STATUS } = require("../contracts/verdicts");
+const { createLogger } = require("../logger");
+const logger = createLogger("shared.submission");
 const { applySubmissionResult } = require("../scoring/applySubmissionResult");
 const {
   enqueueLeaderboardProjectionIfConfigured,
@@ -28,10 +30,11 @@ async function triggerContestScoring(
     }
     return scoringResult;
   } catch (error) {
-    console.error(
-      `Contest scoring failed for submission ${submissionId}:`,
-      error?.message || error,
-    );
+    logger.error({
+      event: "contest_scoring_failed",
+      submissionId: String(submissionId),
+      err: error,
+    });
   }
 }
 

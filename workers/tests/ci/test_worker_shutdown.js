@@ -124,6 +124,15 @@ function createWorkerHarness({ closeError = null } = {}) {
         hostMaxActiveJobs: 1,
         effectiveConcurrency: 1,
       }),
+      getOrphanCleanupConfig: () => ({
+        intervalMs: 60000,
+        maxAgeMs: 300000,
+      }),
+      createLogger: () => ({
+        info: () => undefined,
+        warn: () => undefined,
+        error: () => undefined,
+      }),
       setLeaderboardProjectionEnqueuer: () => undefined,
     },
   };

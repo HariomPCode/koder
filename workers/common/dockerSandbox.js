@@ -2,6 +2,8 @@ const { spawn } = require("child_process");
 const { performance } = require("perf_hooks");
 const readline = require("readline");
 const { encodeRequest, decodeResponse } = require("@koder/shared");
+const { createLogger } = require("@koder/shared");
+const logger = createLogger("worker.docker_sandbox");
 
 
 /**
@@ -54,6 +56,8 @@ class DockerSandbox {
       "--rm",
       "--name",
       this.containerName,
+      "--label",
+      "koder.managed=true",
       "--label",
       "koder.worker=koder",
       "--label",
@@ -451,7 +455,12 @@ class DockerSandbox {
         child.on("error", () => resolve());
       });
     } catch (err) {
-      console.error(`Failed to remove container ${this.containerName}:`, err);
+      logger.error({
+        event: "sandbox_container_destroy_failed",
+        containerName: this.containerName,
+        jobId: this.jobId,
+        err,
+      });
     }
   }
 }

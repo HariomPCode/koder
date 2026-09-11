@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const { createLogger } = require("@koder/shared");
+const logger = createLogger("worker.db");
 
 async function connectDB() {
   if (mongoose.connection.readyState === 1) {
@@ -10,13 +12,12 @@ async function connectDB() {
   }
   try {
     await mongoose.connect(uri);
-    console.log("Worker connected to MongoDB");
+    logger.info({ event: "worker_mongodb_connected" });
     return mongoose.connection;
   } catch (error) {
-    console.error("Worker error connecting to MongoDB:", error);
+    logger.error({ event: "worker_mongodb_connection_failed", err: error });
     throw error;
   }
 }
 
 module.exports = connectDB;
-

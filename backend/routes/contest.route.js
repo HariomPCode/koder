@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.get("/", async (req, res, next) => {
   try {
-    const result = await ContestService.listContests();
+    const result = await ContestService.listContests(req.query);
     return res.json(result);
   } catch (error) {
     return next(error);
@@ -96,6 +96,8 @@ router.get("/:contestId/submissions", middleware, async (req, res, next) => {
       contestId,
       userId,
       requesterUserId: req.userId,
+      page: req.query.page,
+      limit: req.query.limit,
     });
     return res.json(result);
   } catch (error) {

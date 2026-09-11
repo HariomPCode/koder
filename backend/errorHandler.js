@@ -1,4 +1,6 @@
 const AppError = require("./errors/appError");
+const { createLogger } = require("@koder/shared");
+const logger = createLogger("backend.errors");
 
 function notFoundHandler(req, res, next) {
   const error = new AppError("Route not found", 404, "NOT_FOUND");
@@ -47,7 +49,7 @@ function errorHandler(err, req, res, next) {
     });
   }
 
-  console.error("Unhandled application error:", err);
+  logger.error({ event: "unhandled_application_error", err });
   return res.status(500).json({
     message: "Internal server error",
   });

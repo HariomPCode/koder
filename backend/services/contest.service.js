@@ -24,6 +24,9 @@ const {
   normalizeContestStatus,
 } = require("./contestLifecycle");
 const { formatStanding, paginationResult } = standingsService;
+const { parsePagination, paginationResult: buildPaginationResult } = require("../utils/pagination");
+const { createLogger } = require("@koder/shared");
+const logger = createLogger("backend.contest");
 
 const VALID_TRANSITIONS = Object.freeze({
   [CONTEST_STATUS.DRAFT]: [CONTEST_STATUS.SCHEDULED],
@@ -85,9 +88,16 @@ async function getContestById({ contestId, userId = null }) {
   };
 }
 
-async function listContests() {
-  const contests = await ContestRepository.findAll();
-  return { contests };
+async function listContests({ page, limit } = {}) {
+  const pagination = parsePagination({ page, limit }, { defaultLimit: 20 });
+  const [contests, total] = await Promise.all([
+    ContestRepository.findAll(pagination),
+    ContestRepository.countAll(),
+  ]);
+  return {
+    contests,
+    pagination: buildPaginationResult({ ...pagination, total }),
+  };
 }
 
 async function createContest({ createdBy, payload }) {
@@ -366,6 +376,7 @@ async function createContestSubmission({ contestId, userId, payload, idempotency
       userId,
       questionId: question._id,
       language: normalizedLanguage,
+      contestId: currentContest._id,
     });
   } catch (error) {
     await Submission.findByIdAndUpdate(submission._id, { status: SUBMISSION_STATUS.CREATED }).catch(() => {});
@@ -380,7 +391,13 @@ async function createContestSubmission({ contestId, userId, payload, idempotency
   return { submissionId: submission._id, status: "processing" };
 }
 
-async function getContestSubmissions({ contestId, userId = null, requesterUserId = null }) {
+async function getContestSubmissions({
+  contestId,
+  userId = null,
+  requesterUserId = null,
+  page,
+  limit,
+}) {
   const contest = await ContestRepository.findById(contestId);
   if (!contest) {
     throw AppError.notFound("Contest not found");
@@ -390,8 +407,15 @@ async function getContestSubmissions({ contestId, userId = null, requesterUserId
     // no-op: allowed to filter by their own submissions in the API layer
   }
 
-  const submissions = await ContestRepository.listSubmissions(contestId, userId || null);
-  return { submissions };
+  const pagination = parsePagination({ page, limit }, { defaultLimit: 50 });
+  const [submissions, total] = await Promise.all([
+    ContestRepository.listSubmissions(contestId, userId || null, pagination),
+    ContestRepository.countSubmissions(contestId, userId || null),
+  ]);
+  return {
+    submissions,
+    pagination: buildPaginationResult({ ...pagination, total }),
+  };
 }
 
 async function finalizeContest({ contestId, actorUserId, force = false, reason = "" }) {
@@ -598,10 +622,11 @@ async function getContestStandings({ contestId, page = 1, limit = 50 }) {
         limit: parsedLimit,
       });
     } catch (error) {
-      console.warn(
-        `Redis standings read fallback for contest ${currentContest._id}:`,
-        error?.message || error,
-      );
+      logger.warn({
+        event: "redis_standings_read_fallback",
+        contestId: String(currentContest._id),
+        err: error,
+      });
     }
   }
 
@@ -699,10 +724,12 @@ async function getMyContestStanding({ contestId, userId }) {
       userId: normalizeObjectId(userId),
     });
   } catch (error) {
-    console.warn(
-      `Redis personal standings read fallback for contest ${currentContest._id}, user ${userId}:`,
-      error?.message || error,
-    );
+    logger.warn({
+      event: "redis_personal_standings_read_fallback",
+      contestId: String(currentContest._id),
+      userId: String(userId),
+      err: error,
+    });
     const participant = await ContestRepository.findParticipant(currentContest._id, userId);
     if (!participant) {
       throw AppError.notFound("Participant not registered for this contest");

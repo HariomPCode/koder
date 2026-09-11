@@ -17,6 +17,7 @@ const ContestLeaderboardSnapshot = require("./models/ContestLeaderboardSnapshot"
 const ContestFinalizationAudit = require("./models/ContestFinalizationAudit");
 const dbCalls = require("./db/dbCalls");
 const scoringProcessor = require("./scoring/applySubmissionResult");
+const logger = require("./logger");
 
 module.exports = {
   ...languages,
@@ -38,4 +39,5 @@ module.exports = {
   ContestFinalizationAudit,
   ...dbCalls,
   ...scoringProcessor,
+  ...logger,
 };
