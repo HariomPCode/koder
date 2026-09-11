@@ -14,7 +14,8 @@
     "dev:backend": "npm run dev --workspace=backend",
     "worker:js": "npm run worker:js --workspace=workers",
     "worker:java": "npm run worker:java --workspace=workers",
-    "worker:python": "npm run worker:python --workspace=workers"
+    "worker:python": "npm run worker:python --workspace=workers",
+    "load:test": "node tools/load-test.js"
   },
   "devDependencies": {
     "ioredis": "^5.11.1"
