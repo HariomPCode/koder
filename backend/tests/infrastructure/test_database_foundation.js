@@ -79,6 +79,11 @@ async function runTests() {
       assert.strictEqual(user.highestRating, 1200);
     });
 
+    await testCase("User rating index exists", async () => {
+      const indexes = await User.collection.getIndexes();
+      assert.ok(hasIndex(indexes, { rating: -1 }), "rating index missing");
+    });
+
     await testCase("Question uniqueness and tags index exist", async () => {
       const baseQuestion = {
         questionNum: 101,

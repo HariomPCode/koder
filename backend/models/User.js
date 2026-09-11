@@ -46,6 +46,8 @@ const userSchema = new Schema(
   },
 );
 
+userSchema.index({ rating: -1 });
+
 userSchema.set("toJSON", {
   transform: (doc, ret) => {
     delete ret.password;

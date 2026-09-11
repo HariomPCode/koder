@@ -62,11 +62,11 @@ The backend exposes `/api/v1` routes for authentication, users, questions, and s
 
 ## Supported Languages
 
-| Language | Docker image | Source file | Command | Queue |
-| --- | --- | --- | --- | --- |
-| JavaScript | `node:20-alpine` | `app.js` | `node app.js` | `js-queue` |
-| Java | `eclipse-temurin:17-jdk-alpine-3.23` | `Main.java` | `javac Main.java`, then `java Main` | `java-queue` |
-| Python | `python:3.11-alpine` | `solution.py` | `python -u solution.py` | `python-queue` |
+| Language   | Docker image                         | Source file   | Command                             | Queue          |
+| ---------- | ------------------------------------ | ------------- | ----------------------------------- | -------------- |
+| JavaScript | `node:20-alpine`                     | `app.js`      | `node app.js`                       | `js-queue`     |
+| Java       | `eclipse-temurin:17-jdk-alpine-3.23` | `Main.java`   | `javac Main.java`, then `java Main` | `java-queue`   |
+| Python     | `python:3.11-alpine`                 | `solution.py` | `python -u solution.py`             | `python-queue` |
 
 `SUPPORTED_LANGUAGES` in `packages/shared/config/languages.js` defines the three accepted values: `javascript`, `java`, and `python`. The frontend selector, question starter code, submission validation, queues, and workers use this contract. Python is implemented end to end, including starter-code generation, a runner, queue dispatch, and a worker.
 
@@ -76,16 +76,16 @@ The backend exposes `/api/v1` routes for authentication, users, questions, and s
 
 The sandbox is configured with these Docker controls:
 
-| Control | Implemented setting |
-| --- | --- |
-| Network | `--network none` |
-| Linux capabilities | `--cap-drop ALL` |
-| Privilege escalation | `--security-opt no-new-privileges` |
-| Syscall policy | Docker's built-in seccomp profile |
-| Runtime user | `--user 1000:1000` |
-| Root filesystem | `--read-only` |
-| Temporary filesystem | `--tmpfs /tmp:size=64m` |
-| Work directory | writable bind mount of the per-job directory at `/app` |
+| Control              | Implemented setting                                    |
+| -------------------- | ------------------------------------------------------ |
+| Network              | `--network none`                                       |
+| Linux capabilities   | `--cap-drop ALL`                                       |
+| Privilege escalation | `--security-opt no-new-privileges`                     |
+| Syscall policy       | Docker's built-in seccomp profile                      |
+| Runtime user         | `--user 1000:1000`                                     |
+| Root filesystem      | `--read-only`                                          |
+| Temporary filesystem | `--tmpfs /tmp:size=64m`                                |
+| Work directory       | writable bind mount of the per-job directory at `/app` |
 
 On timeout or execution cleanup, the sandbox attempts to kill matching `node`, `java`, `javac`, and `python` processes before the container is removed.
 
@@ -105,18 +105,18 @@ BullMQ job IDs are scoped to a queue, so different language queues can each prod
 
 `DockerSandbox` and the execution engine apply the following defaults:
 
-| Resource | Limit / behavior |
-| --- | --- |
-| Memory | `--memory=256m` |
-| CPU | `--cpus=1` |
-| Processes | `--pids-limit=64` |
-| `/tmp` | `64m` tmpfs |
-| Idle container lifetime | 120 seconds (`sleep`) |
-| Per-test-case watchdog | 2,000 ms |
-| Overall submission deadline | 45,000 ms |
-| Java compilation watchdog | 25,000 ms |
-| Captured stdout/stderr buffer | 5 MiB |
-| Batch size | 50 test cases |
+| Resource                      | Limit / behavior      |
+| ----------------------------- | --------------------- |
+| Memory                        | `--memory=256m`       |
+| CPU                           | `--cpus=1`            |
+| Processes                     | `--pids-limit=64`     |
+| `/tmp`                        | `64m` tmpfs           |
+| Idle container lifetime       | 120 seconds (`sleep`) |
+| Per-test-case watchdog        | 2,000 ms              |
+| Overall submission deadline   | 45,000 ms             |
+| Java compilation watchdog     | 25,000 ms             |
+| Captured stdout/stderr buffer | 5 MiB                 |
+| Batch size                    | 50 test cases         |
 
 The shared verdict contract defines `Accepted`, `Wrong Answer`, `Runtime Error`, `Time Limit Exceeded`, `Compilation Error`, and `Memory Limit Exceeded`. The engine currently assigns the first five: compilation errors apply to Java, timeouts are enforced by the watchdogs, and a process failure or non-`OK` runner response is a runtime error. It stops at the first failing test case. Output comparison first normalizes surrounding whitespace and line endings, then also supports JSON-equivalent values, boolean case normalization, and sequence-style whitespace/comma formatting.
 
@@ -221,10 +221,10 @@ node backend/promoteAdmin.js user@example.com
 
 `docker-compose.yml` runs only the shared local infrastructure:
 
-| Service | Image | Host binding | Persistent data |
-| --- | --- | --- | --- |
-| MongoDB | `mongo:8` | `127.0.0.1:27017` | `mongo-data` |
-| Redis | `redis:7-alpine` | `127.0.0.1:6379` | `redis-data` |
+| Service | Image            | Host binding      | Persistent data |
+| ------- | ---------------- | ----------------- | --------------- |
+| MongoDB | `mongo:8`        | `127.0.0.1:27017` | `mongo-data`    |
+| Redis   | `redis:7-alpine` | `127.0.0.1:6379`  | `redis-data`    |
 
 MongoDB has a `mongosh` ping health check. Redis uses append-only persistence and a `redis-cli ping` health check. Both bind to loopback. Compose does not run the frontend, backend, or workers, and it does not mount the Docker socket or use privileged containers.
 
@@ -239,15 +239,15 @@ docker compose down
 
 The project uses Node scripts and built-in `assert`; it does not use an external test framework.
 
-| Command | Scope | Verified by package script |
-| --- | --- | --- |
-| `npm test` | root | backend and worker CI-safe suites |
-| `npm run test:ci` | root | same as `npm test` |
-| `npm run test:ci --workspace=backend` | backend | five backend test scripts |
-| `npm run test:ci --workspace=workers` | workers | `test_execution_engine.js` |
-| `npm run test:docker --workspace=workers` | workers | `test_python_docker.js`; requires Docker |
+| Command                                     | Scope   | Verified by package script                                                                                |
+| ------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------- |
+| `npm test`                                  | root    | backend and worker CI-safe suites                                                                         |
+| `npm run test:ci`                           | root    | same as `npm test`                                                                                        |
+| `npm run test:ci --workspace=backend`       | backend | five backend test scripts                                                                                 |
+| `npm run test:ci --workspace=workers`       | workers | `test_execution_engine.js`                                                                                |
+| `npm run test:docker --workspace=workers`   | workers | `test_python_docker.js`; requires Docker                                                                  |
 | `npm run test:security --workspace=workers` | workers | `test_java_sandbox_security.js`; requires Docker and checks Java API guards, resource limits, and cleanup |
-| `npm run test:smoke --workspace=workers` | workers | manual Docker/MongoDB smoke scripts |
+| `npm run test:smoke --workspace=workers`    | workers | manual Docker/MongoDB smoke scripts                                                                       |
 
 `workers/tests/docker/test_sandbox_collision_docker.js` directly checks the cross-language sandbox collision fix, but it is not included in a package script. Run it manually when Docker is available:
 
