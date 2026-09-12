@@ -1,6 +1,8 @@
 "use client";
 
 import { toast } from "@/components/ui/toast";
+import { api } from "@/lib/api-client";
+import type { AuthResponse } from "@/types/api";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -27,8 +29,6 @@ export default function Login() {
 
   const { refreshUser } = useAuth();
 
-  const backendUri = process.env.NEXT_PUBLIC_BACKEND_URL;
-
   const isFormValid = email.trim().length > 0 && password.length > 0;
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -41,28 +41,10 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${backendUri}/api/v1/auth/signin`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const result = await api.post<AuthResponse>("/api/v1/auth/signin", {
           email: email.trim(),
           password,
-        }),
       });
-
-      const result = await res.json();
-
-      if (!res.ok) {
-        toast.add({
-          type: "error",
-          description: result.message || "Invalid email or password.",
-        });
-
-        return;
-      }
 
       await refreshUser();
 

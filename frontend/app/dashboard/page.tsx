@@ -4,20 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
-
-type Difficulty = "Easy" | "Medium" | "Hard";
-interface ProblemSummary { title: string; slug: string; difficulty: Difficulty; }
-interface RecentSubmission { question: ProblemSummary; language: string; verdict: string; maxRuntime: number; createdAt: string; }
-interface SolvedProblem extends ProblemSummary { solvedAt: string; }
-interface Stats {
-  totalSubmissions: number; solvedCount: number; attemptedCount: number; attemptedButUnsolved: number;
-  acceptedSubmissions: number; acceptanceRate: number; solvedEasyQuestions: number;
-  solvedMediumQuestions: number; solvedHardQuestions: number;
-  availableByDifficulty: Record<Difficulty, number>;
-  recentSubmissions: RecentSubmission[]; recentlySolved: SolvedProblem[];
-  activity: { currentStreak: number; longestStreak: number; lastActive: string | null; weeklySolved: number; weeklyAttempted: number; };
-  recommendation: ProblemSummary | null;
-}
+import { api } from "@/lib/api-client";
+import type { Difficulty, UserStats } from "@/types/api";
 
 const verdictClasses: Record<string, string> = {
   Accepted: "bg-emerald-50 text-emerald-700 ring-emerald-600/15",
@@ -48,18 +36,20 @@ function ProgressRow({ label, solved, available }: { label: Difficulty; solved: 
 }
 
 export default function Dashboard() {
-  const backend = process.env.NEXT_PUBLIC_BACKEND_URL;
   const { user } = useAuth();
-  const [stats, setStats] = useState<Stats | null>(null);
+  const [stats, setStats] = useState<UserStats | null>(null);
 
-  useEffect(() => { void fetchStats(); }, []);
   async function fetchStats() {
     try {
-      const res = await fetch(`${backend}/api/v1/user/stats`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch dashboard stats");
-      setStats(await res.json());
+      setStats(await api.get<UserStats>("/api/v1/user/stats"));
     } catch (err) { console.error(err); }
   }
+
+  useEffect(() => {
+    // Initial dashboard data is loaded after the component mounts.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchStats();
+  }, []);
 
   if (!stats) {
     return <main className="mx-auto w-full max-w-7xl p-6 sm:p-8"><div className="h-8 w-56 animate-pulse rounded bg-muted" /><div className="mt-3 h-4 w-80 max-w-full animate-pulse rounded bg-muted" /><div className="mt-10 grid grid-cols-2 gap-4 xl:grid-cols-4">{[0, 1, 2, 3].map((item) => <div key={item} className="h-32 animate-pulse rounded-xl border bg-muted/40" />)}</div></main>;

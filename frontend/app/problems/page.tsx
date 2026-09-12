@@ -1,54 +1,28 @@
 "use client";
 
 import { toast } from "@/components/ui/toast";
+import { api } from "@/lib/api-client";
+import type { Difficulty, ProblemListItem, QuestionsResponse } from "@/types/api";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-interface Problem {
-  _id: string;
-  questionNum: number;
-  title: string;
-  slug: string;
-  difficulty: "Easy" | "Medium" | "Hard";
-  tags: string[];
-}
-
-type DifficultyFilter = "All" | "Easy" | "Medium" | "Hard";
+type DifficultyFilter = "All" | Difficulty;
 
 function Problems() {
-  const [problems, setProblems] = useState<Problem[]>([]);
+  const [problems, setProblems] = useState<ProblemListItem[]>([]);
   const [search, setSearch] = useState("");
   const [difficulty, setDifficulty] = useState<DifficultyFilter>("All");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  const backendUri = process.env.NEXT_PUBLIC_BACKEND_URL;
-
-  useEffect(() => {
-    fetchQuestions();
-  }, []);
 
   const fetchQuestions = async () => {
     try {
       setLoading(true);
       setError("");
 
-      const res = await fetch(
-        `${backendUri}/api/v1/questions?page=1&limit=20`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-        },
+      const data = await api.get<QuestionsResponse>(
+        "/api/v1/questions?page=1&limit=20",
       );
-
-      if (!res.ok) {
-        throw new Error("Failed to fetch questions");
-      }
-
-      const data = await res.json();
 
       setProblems(data.questions || []);
 
@@ -63,6 +37,12 @@ function Problems() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    // Initial route data is loaded after the component mounts.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchQuestions();
+  }, []);
 
   const filteredProblems = useMemo(() => {
     const query = search.trim().toLowerCase();

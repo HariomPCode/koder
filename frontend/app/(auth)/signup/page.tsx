@@ -12,6 +12,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AlertCircle, CheckCircle2Icon, Eye, EyeOff } from "lucide-react";
+import { api } from "@/lib/api-client";
+import type { AuthResponse } from "@/types/api";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -27,8 +29,6 @@ export default function Signup() {
   const [messageType, setMessageType] = useState<"success" | "error" | "">("");
 
   const [showPassword, setShowPassword] = useState(false);
-
-  const backendUri = process.env.NEXT_PUBLIC_BACKEND_URL;
 
   const isFormValid =
     firstName.trim().length > 0 &&
@@ -55,26 +55,12 @@ export default function Signup() {
     setMessageType("");
 
     try {
-      const res = await fetch(`${backendUri}/api/v1/auth/signup`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const result = await api.post<AuthResponse>("/api/v1/auth/signup", {
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           email: email.trim().toLowerCase(),
           password,
-        }),
       });
-
-      const result = await res.json();
-
-      if (!res.ok) {
-        setMessage(result.message || "Unable to create your account.");
-        setMessageType("error");
-        return;
-      }
 
       setMessage(
         result.message || "Account created successfully. You can now log in.",

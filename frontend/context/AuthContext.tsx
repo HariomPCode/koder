@@ -1,13 +1,8 @@
 "use client";
 
 import { createContext, useEffect, useState, ReactNode } from "react";
-
-export interface User {
-  _id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-}
+import { api } from "@/lib/api-client";
+import type { User } from "@/types/api";
 
 interface AuthContextType {
   user: User | null;
@@ -24,24 +19,12 @@ export const AuthContext = createContext<AuthContextType>({
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const backend = process.env.NEXT_PUBLIC_BACKEND_URL;
-
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refreshUser = async () => {
     try {
-      const res = await fetch(`${backend}/api/v1/user`, {
-        credentials: "include",
-      });
-
-      if (!res.ok) {
-        setUser(null);
-        return;
-      }
-
-      const data = await res.json();
-
+      const data = await api.get<{ user: User }>("/api/v1/user");
       setUser(data.user);
     } catch {
       setUser(null);
@@ -52,10 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
-      await fetch(`${backend}/api/v1/auth/signout`, {
-        method: "POST",
-        credentials: "include",
-      });
+      await api.post("/api/v1/auth/signout");
     } catch (err) {
       console.error(err);
     }
@@ -64,7 +44,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    refreshUser();
+    const timer = window.setTimeout(() => {
+      void refreshUser();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   return (
