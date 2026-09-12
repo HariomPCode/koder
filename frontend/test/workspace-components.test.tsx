@@ -9,6 +9,7 @@ import { useResizablePanes } from "@/features/workspace/useResizablePanes";
 import { ApiError } from "@/lib/api-client";
 import { getSubmissionErrorMessage } from "@/lib/api/submissions";
 import * as submissionApi from "@/lib/api/submissions";
+import * as userApi from "@/lib/api/user";
 import type { ProblemDetail, Submission } from "@/types/api";
 
 const problem: ProblemDetail = {
@@ -246,5 +247,66 @@ describe("submission history", () => {
       expect(screen.getByText("Unable to load submissions")).toBeInTheDocument(),
     );
     expect(getQuestionSubmissions).toHaveBeenCalledWith("problem-2");
+  });
+});
+
+describe("next problem recommendation", () => {
+  it("shows the recommended next problem after an accepted submission", async () => {
+    vi.spyOn(userApi, "getUserStats").mockResolvedValue({
+      recommendation: {
+        slug: "valid-parentheses",
+        title: "Valid Parentheses",
+        difficulty: "Easy",
+      },
+    } as never);
+
+    render(
+      <ResultDrawer
+        submission={{
+          _id: "accepted-submission",
+          status: "completed",
+          verdict: "Accepted",
+        }}
+      />,
+    );
+
+    const link = await screen.findByRole("link", {
+      name: /Next problem: Valid Parentheses/,
+    });
+    expect(link).toHaveAttribute("href", "/problems/valid-parentheses");
+  });
+
+  it("omits the next problem affordance without a recommendation or acceptance", async () => {
+    vi.spyOn(userApi, "getUserStats").mockResolvedValue({
+      recommendation: null,
+    } as never);
+
+    const { rerender } = render(
+      <ResultDrawer
+        submission={{
+          _id: "accepted-submission",
+          status: "completed",
+          verdict: "Accepted",
+        }}
+      />,
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("link", { name: /Next problem/ }),
+      ).not.toBeInTheDocument(),
+    );
+
+    rerender(
+      <ResultDrawer
+        submission={{
+          _id: "wrong-submission",
+          status: "completed",
+          verdict: "Wrong Answer",
+        }}
+      />,
+    );
+    expect(
+      screen.queryByRole("link", { name: /Next problem/ }),
+    ).not.toBeInTheDocument();
   });
 });

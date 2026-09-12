@@ -15,7 +15,6 @@ import type {
   StarterCode,
   Submission,
   SubmissionCreateResponse,
-  SubmissionResponse,
 } from "@/types/api";
 import { EditorToolbar } from "@/features/workspace/EditorToolbar";
 import { ResizeHandle } from "@/features/workspace/ResizeHandle";
@@ -23,6 +22,7 @@ import { ResultDrawer } from "@/features/workspace/ResultDrawer";
 import { StatementPane } from "@/features/workspace/StatementPane";
 import { useResizablePanes } from "@/features/workspace/useResizablePanes";
 import { getSubmissionErrorMessage } from "@/lib/api/submissions";
+import { useSubmissionEvents } from "@/hooks/useSubmissionEvents";
 
 export default function SolveProblem() {
   const { slug } = useParams();
@@ -33,6 +33,9 @@ export default function SolveProblem() {
     null,
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionUpdateError, setSubmissionUpdateError] = useState<string | null>(
+    null,
+  );
   const [code, setCode] = useState("function solve() {\n\n}");
   const [language, setLanguage] = useState("");
   const [isDesktop, setIsDesktop] = useState(false);
@@ -118,66 +121,38 @@ export default function SolveProblem() {
     }
   };
 
-  const pollSubmission = (submissionId: string) => {
-    const interval = window.setInterval(async () => {
-      try {
-        const data = await api.get<SubmissionResponse>(
-          `/api/v1/submissions/${submissionId}`,
-        );
-        setSubmission(data.submission);
-        if (data.submission.status === "completed") {
-          window.clearInterval(interval);
-          setIsSubmitting(false);
-          toast.add({ type: "success", description: data.submission.verdict });
-        }
-      } catch (err) {
-        window.clearInterval(interval);
-        setIsSubmitting(false);
-        console.error(err);
-        toast.add({
-          type: "error",
-          description: "Failed to fetch submission",
-        });
-      }
-    }, 1000);
-  };
-
-  useEffect(() => {
-    if (!activeSubmissionId) return undefined;
-    const events = new EventSource(
-      `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/events/stream`,
-      {
-        withCredentials: true,
-      },
-    );
-    const handleCompleted = async (event: MessageEvent<string>) => {
-      try {
-        const payload = JSON.parse(event.data) as { submissionId?: string };
-        if (payload.submissionId !== activeSubmissionId) return;
-        const data = await api.get<SubmissionResponse>(
-          `/api/v1/submissions/${activeSubmissionId}`,
-        );
-        setSubmission(data.submission);
-        setIsSubmitting(false);
-      } catch (error) {
-        console.error(error);
-      }
-    };
-    events.addEventListener("submission.completed", handleCompleted);
-    return () => events.close();
-  }, [activeSubmissionId]);
+  useSubmissionEvents({
+    submissionId: activeSubmissionId,
+    onSubmissionUpdate: (nextSubmission) => {
+      setSubmission(nextSubmission);
+      setSubmissionUpdateError(null);
+    },
+    onTerminal: (completedSubmission) => {
+      setIsSubmitting(false);
+      toast.add({
+        type: "success",
+        description: completedSubmission.verdict,
+      });
+    },
+    onPollingError: setSubmissionUpdateError,
+  });
 
   const submitProblem = async () => {
     if (!problem || isSubmitting) return;
     setIsSubmitting(true);
+    setSubmissionUpdateError(null);
     try {
       const data = await api.post<SubmissionCreateResponse>(
         `/api/v1/submissions/${problem._id}`,
         { language, code },
       );
+      setSubmission({
+        status: "created",
+        verdict: "",
+        language,
+      });
       setActiveSubmissionId(data.submissionId);
       toast.add({ type: "success", description: "Submission queued" });
-      pollSubmission(data.submissionId);
     } catch (err) {
       console.error(err);
       toast.add({
@@ -242,7 +217,10 @@ export default function SolveProblem() {
               }}
             />
           </div>
-          <ResultDrawer submission={submission} />
+          <ResultDrawer
+            submission={submission}
+            submissionUpdateError={submissionUpdateError}
+          />
         </section>
       </div>
     </main>
