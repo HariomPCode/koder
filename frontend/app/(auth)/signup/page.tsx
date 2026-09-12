@@ -14,10 +14,17 @@ import { Label } from "@/components/ui/label";
 import { AlertCircle, CheckCircle2Icon, Eye, EyeOff } from "lucide-react";
 import { api } from "@/lib/api-client";
 import type { AuthResponse } from "@/types/api";
+import { ApiError } from "@/lib/api-client";
+import { getSafeNextPath, isSuccessfulAuthResponse } from "@/lib/auth";
 import Link from "next/link";
+import { useAuth } from "@/hooks/useAuth";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useEffect } from "react";
 
 export default function Signup() {
+  const router = useRouter();
+  const { refreshUser, status } = useAuth();
   const [loading, setLoading] = useState(false);
 
   const [firstName, setFirstName] = useState("");
@@ -29,6 +36,12 @@ export default function Signup() {
   const [messageType, setMessageType] = useState<"success" | "error" | "">("");
 
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.replace(getSafeNextPath(window.location.search));
+    }
+  }, [router, status]);
 
   const isFormValid =
     firstName.trim().length > 0 &&
@@ -62,19 +75,39 @@ export default function Signup() {
           password,
       });
 
+      if (!isSuccessfulAuthResponse(result)) {
+        setMessage(result.message || "Unable to create your account.");
+        setMessageType("error");
+        return;
+      }
+
+      if (!(await refreshUser())) {
+        setMessage("Account created, but your session could not be verified.");
+        setMessageType("error");
+        return;
+      }
       setMessage(
-        result.message || "Account created successfully. You can now log in.",
+        "Account created successfully. Redirecting to your dashboard.",
       );
       setMessageType("success");
+      router.push(getSafeNextPath(window.location.search));
     } catch (error) {
       console.error("Signup error:", error);
 
-      setMessage("Unable to connect to the server. Please try again.");
+      setMessage(
+        error instanceof ApiError
+          ? error.message
+          : "Unable to connect to the server. Please try again.",
+      );
       setMessageType("error");
     } finally {
       setLoading(false);
     }
   };
+
+  if (status === "checking" || status === "authenticated") {
+    return <main className="flex min-h-screen items-center justify-center"><span className="text-sm text-muted-foreground">Checking session...</span></main>;
+  }
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-8">

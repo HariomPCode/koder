@@ -8,6 +8,7 @@ import { api } from "@/lib/api-client";
 import type { Difficulty, UserStats } from "@/types/api";
 import { DIFFICULTY_PRESENTATION } from "@/lib/constants/difficulty";
 import { VERDICT_PRESENTATION } from "@/lib/constants/verdict";
+import { RequireAuth } from "@/components/auth/RequireAuth";
 
 
 function relativeTime(value: string | null) {
@@ -29,7 +30,7 @@ function ProgressRow({ label, solved, available }: { label: Difficulty; solved: 
   return <div className="py-3"><div className="flex items-baseline justify-between gap-4"><div><p className="text-sm font-medium text-foreground">{label}</p><p className="mt-0.5 text-xs text-muted-foreground">{solved} solved · {available} available</p></div><span className="text-sm font-medium text-muted-foreground">{percentage}%</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div className={`h-full rounded-full ${DIFFICULTY_PRESENTATION[label].progress}`} style={{ width: `${percentage}%` }} /></div></div>;
 }
 
-export default function Dashboard() {
+function DashboardContent() {
   const { user } = useAuth();
   const [stats, setStats] = useState<UserStats | null>(null);
 
@@ -81,4 +82,12 @@ export default function Dashboard() {
 
     <section className="mt-6 grid gap-4 sm:grid-cols-2"><Card><CardContent className="p-5"><p className="text-sm font-medium text-muted-foreground">Accepted Submissions</p><p className="mt-2 text-3xl font-semibold">{stats.acceptedSubmissions}</p></CardContent></Card><Card><CardContent className="p-5"><p className="text-sm font-medium text-muted-foreground">Attempted but Unsolved</p><p className="mt-2 text-3xl font-semibold">{stats.attemptedButUnsolved}</p></CardContent></Card></section>
   </main>;
+}
+
+export default function Dashboard() {
+  return (
+    <RequireAuth>
+      <DashboardContent />
+    </RequireAuth>
+  );
 }

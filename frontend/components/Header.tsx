@@ -60,6 +60,11 @@ export default function Header() {
                 <DropdownMenuItem disabled>
                   <div className="flex flex-col">
                     <span className="font-medium">{user.firstName}</span>
+                    {user.rating !== undefined ? (
+                      <span className="text-xs text-muted-foreground">
+                        Rating {user.rating}
+                      </span>
+                    ) : null}
                     <span className="text-xs text-muted-foreground">{user.email}</span>
                   </div>
                 </DropdownMenuItem>

@@ -3,6 +3,8 @@
 import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api-client";
 import type { AuthResponse } from "@/types/api";
+import { ApiError } from "@/lib/api-client";
+import { getSafeNextPath, isSuccessfulAuthResponse } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -17,7 +19,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function Login() {
   const router = useRouter();
@@ -27,7 +29,13 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  const { refreshUser } = useAuth();
+  const { refreshUser, status } = useAuth();
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.replace(getSafeNextPath(window.location.search));
+    }
+  }, [router, status]);
 
   const isFormValid = email.trim().length > 0 && password.length > 0;
 
@@ -46,25 +54,46 @@ export default function Login() {
           password,
       });
 
-      await refreshUser();
+      if (!isSuccessfulAuthResponse(result)) {
+        toast.add({
+          type: "error",
+          description: result.message || "Invalid email or password.",
+        });
+        return;
+      }
+
+      if (!(await refreshUser())) {
+        toast.add({
+          type: "error",
+          description: "Signed in, but your session could not be verified.",
+        });
+        return;
+      }
 
       toast.add({
         type: "success",
         description: result.message || "Login successful!",
       });
 
-      router.push("/dashboard");
+      router.push(getSafeNextPath(window.location.search));
     } catch (error) {
       console.error("Login error:", error);
 
       toast.add({
         type: "error",
-        description: "Unable to connect to the server. Please try again.",
+        description:
+          error instanceof ApiError
+            ? error.message
+            : "Unable to connect to the server. Please try again.",
       });
     } finally {
       setLoading(false);
     }
   };
+
+  if (status === "checking" || status === "authenticated") {
+    return <main className="flex min-h-screen items-center justify-center"><span className="text-sm text-muted-foreground">Checking session...</span></main>;
+  }
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-8">

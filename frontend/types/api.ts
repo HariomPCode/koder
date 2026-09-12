@@ -22,7 +22,10 @@ export interface User {
   firstName: string;
   lastName: string;
   email: string;
-  role?: "user" | "admin";
+  role: "user" | "admin";
+  rating?: number;
+  highestRating?: number;
+  contestsParticipated?: number;
 }
 
 export interface AuthResponse {
