@@ -1,7 +1,11 @@
 "use client";
 
-import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api-client";
+import { EmptyState } from "@/components/layout/EmptyState";
+import { ErrorState } from "@/components/layout/ErrorState";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { Skeleton } from "@/components/ui/skeleton";
+import { DIFFICULTIES, DIFFICULTY_PRESENTATION } from "@/lib/constants/difficulty";
 import type { Difficulty, ProblemListItem, QuestionsResponse } from "@/types/api";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -26,10 +30,6 @@ function Problems() {
 
       setProblems(data.questions || []);
 
-      toast.add({
-        type: "success",
-        description: data.message,
-      });
     } catch (error) {
       console.error(error);
       setError("Unable to load problems. Please try again.");
@@ -70,15 +70,8 @@ function Problems() {
     };
   }, [problems]);
 
-  const difficultyStyles = {
-    Easy: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    Medium: "bg-amber-50 text-amber-700 border-amber-200",
-    Hard: "bg-red-50 text-red-700 border-red-200",
-  };
-
   return (
-    <main className="min-h-screen bg-gray-50">
-      <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+    <PageContainer className="max-w-6xl">
         {/* Header */}
         <section className="mb-8">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -89,8 +82,8 @@ function Problems() {
             </div>
 
             {!loading && !error && (
-              <div className="text-sm text-gray-500">
-                <span className="font-semibold text-gray-900">
+              <div className="text-sm text-muted-foreground">
+                  <span className="font-semibold text-foreground">
                   {problems.length}
                 </span>{" "}
                 problems available
@@ -121,13 +114,13 @@ function Problems() {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search problems or topics..."
-                  className="h-10 w-full rounded-lg border border-gray-200 bg-gray-50 pl-10 pr-4 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-gray-400 focus:bg-white focus:ring-2 focus:ring-gray-100"
+                  className="h-10 w-full rounded-lg border border-input bg-background pl-10 pr-4 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                 />
               </div>
 
               {/* Difficulty filters */}
               <div className="flex flex-wrap gap-2">
-                {(["All", "Easy", "Medium", "Hard"] as DifficultyFilter[]).map(
+                {(["All", ...DIFFICULTIES] as DifficultyFilter[]).map(
                   (filter) => {
                     const active = difficulty === filter;
 
@@ -138,15 +131,15 @@ function Problems() {
                         onClick={() => setDifficulty(filter)}
                         className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
                           active
-                            ? "border-gray-900 bg-gray-900 text-white"
-                            : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-card text-muted-foreground hover:bg-muted"
                         }`}
                       >
                         {filter}
 
                         <span
                           className={`ml-1.5 ${
-                            active ? "text-gray-300" : "text-gray-400"
+                            active ? "text-primary-foreground/70" : "text-muted-foreground"
                           }`}
                         >
                           {difficultyCounts[filter]}
@@ -162,17 +155,17 @@ function Problems() {
 
         {/* Loading */}
         {loading && (
-          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-            <div className="animate-pulse">
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
+            <div>
               {[1, 2, 3, 4, 5].map((item) => (
                 <div
                   key={item}
-                  className="flex items-center gap-4 border-b border-gray-100 px-5 py-5 last:border-b-0"
+                  className="flex items-center gap-4 border-b border-border px-5 py-5 last:border-b-0"
                 >
-                  <div className="h-4 w-8 rounded bg-gray-200" />
-                  <div className="h-4 flex-1 max-w-xs rounded bg-gray-200" />
-                  <div className="hidden h-4 w-32 rounded bg-gray-200 sm:block" />
-                  <div className="h-6 w-16 rounded-full bg-gray-200" />
+                  <Skeleton className="h-4 w-8" />
+                  <Skeleton className="h-4 max-w-xs flex-1" />
+                  <Skeleton className="hidden h-4 w-32 sm:block" />
+                  <Skeleton className="h-6 w-16 rounded-full" />
                 </div>
               ))}
             </div>
@@ -181,33 +174,15 @@ function Problems() {
 
         {/* Error */}
         {!loading && error && (
-          <div className="rounded-xl border border-red-200 bg-white p-8 text-center">
-            <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-red-50 text-red-600">
-              !
-            </div>
-
-            <h2 className="font-semibold text-gray-900">
-              Something went wrong
-            </h2>
-
-            <p className="mt-1 text-sm text-gray-500">{error}</p>
-
-            <button
-              type="button"
-              onClick={fetchQuestions}
-              className="mt-5 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-800"
-            >
-              Try again
-            </button>
-          </div>
+          <ErrorState description={error} action={{ label: "Try again", onClick: fetchQuestions }} />
         )}
 
         {/* Problem list */}
         {!loading && !error && (
           <>
-            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+            <div className="overflow-hidden rounded-xl border border-border bg-card">
               {/* Desktop table header */}
-              <div className="hidden grid-cols-[64px_minmax(0,1fr)_220px_110px] items-center gap-4 border-b border-gray-200 bg-gray-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 md:grid">
+              <div className="hidden grid-cols-[64px_minmax(0,1fr)_220px_110px] items-center gap-4 border-b border-border bg-muted/40 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
                 <span>#</span>
                 <span>Problem</span>
                 <span>Topics</span>
@@ -219,16 +194,16 @@ function Problems() {
                   <Link
                     key={problem._id}
                     href={`/problems/${problem.slug}`}
-                    className="group block border-b border-gray-100 px-5 py-4 transition last:border-b-0 hover:bg-gray-50"
+                    className="group block border-b border-border px-5 py-4 transition last:border-b-0 hover:bg-muted/40"
                   >
                     {/* Desktop */}
                     <div className="hidden grid-cols-[64px_minmax(0,1fr)_220px_110px] items-center gap-4 md:grid">
-                      <span className="text-sm tabular-nums text-gray-400">
+                      <span className="text-sm tabular-nums text-muted-foreground">
                         {problem.questionNum}
                       </span>
 
                       <div className="min-w-0">
-                        <h2 className="truncate text-sm font-semibold text-gray-900 transition group-hover:text-black">
+                        <h2 className="truncate text-sm font-semibold text-foreground transition group-hover:text-primary">
                           {problem.title}
                         </h2>
                       </div>
@@ -237,23 +212,21 @@ function Problems() {
                         {problem.tags.slice(0, 3).map((tag) => (
                           <span
                             key={tag}
-                            className="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-500"
+                            className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground"
                           >
                             {tag}
                           </span>
                         ))}
 
                         {problem.tags.length > 3 && (
-                          <span className="px-1 py-1 text-xs text-gray-400">
+                          <span className="px-1 py-1 text-xs text-muted-foreground">
                             +{problem.tags.length - 3}
                           </span>
                         )}
                       </div>
 
                       <span
-                        className={`w-fit rounded-full border px-2.5 py-1 text-xs font-medium ${
-                          difficultyStyles[problem.difficulty]
-                        }`}
+                        className={`w-fit rounded-full border px-2.5 py-1 text-xs font-medium ${DIFFICULTY_PRESENTATION[problem.difficulty].badge}`}
                       >
                         {problem.difficulty}
                       </span>
@@ -263,12 +236,12 @@ function Problems() {
                     <div className="md:hidden">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex min-w-0 gap-3">
-                          <span className="pt-0.5 text-sm tabular-nums text-gray-400">
+                          <span className="pt-0.5 text-sm tabular-nums text-muted-foreground">
                             {problem.questionNum}
                           </span>
 
                           <div className="min-w-0">
-                            <h2 className="text-sm font-semibold text-gray-900">
+                            <h2 className="text-sm font-semibold text-foreground">
                               {problem.title}
                             </h2>
 
@@ -276,7 +249,7 @@ function Problems() {
                               {problem.tags.slice(0, 3).map((tag) => (
                                 <span
                                   key={tag}
-                                  className="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-500"
+                                  className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground"
                                 >
                                   {tag}
                                 </span>
@@ -286,9 +259,7 @@ function Problems() {
                         </div>
 
                         <span
-                          className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium ${
-                            difficultyStyles[problem.difficulty]
-                          }`}
+                          className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium ${DIFFICULTY_PRESENTATION[problem.difficulty].badge}`}
                         >
                           {problem.difficulty}
                         </span>
@@ -297,43 +268,29 @@ function Problems() {
                   </Link>
                 ))
               ) : (
-                <div className="px-6 py-16 text-center">
-                  <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-500">
-                    ?
-                  </div>
-
-                  <h2 className="font-semibold text-gray-900">
-                    No problems found
-                  </h2>
-
-                  <p className="mt-1 text-sm text-gray-500">
-                    Try changing your search or difficulty filter.
-                  </p>
-
-                  <button
-                    type="button"
-                    onClick={() => {
+                <EmptyState
+                  title="No problems found"
+                  description="Try changing your search or difficulty filter."
+                  action={{
+                    label: "Clear filters",
+                    onClick: () => {
                       setSearch("");
                       setDifficulty("All");
-                    }}
-                    className="mt-4 text-sm font-medium text-gray-900 underline underline-offset-4"
-                  >
-                    Clear filters
-                  </button>
-                </div>
+                    },
+                  }}
+                />
               )}
             </div>
 
             {/* Result count */}
             {filteredProblems.length > 0 && (
-              <p className="mt-4 text-center text-xs text-gray-400">
+              <p className="mt-4 text-center text-xs text-muted-foreground">
                 Showing {filteredProblems.length} of {problems.length} problems
               </p>
             )}
           </>
         )}
-      </div>
-    </main>
+    </PageContainer>
   );
 }
 

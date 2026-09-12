@@ -1,7 +1,7 @@
 "use client";
 
 import Editor from "@monaco-editor/react";
-import { Button } from "@base-ui/react";
+import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api-client";
 import type {
@@ -14,18 +14,8 @@ import type {
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
-const verdictStyles: Record<string, string> = {
-  Accepted: "text-emerald-700",
-  "Wrong Answer": "text-amber-700",
-  "Runtime Error": "text-rose-700",
-  "Compilation Error": "text-rose-700",
-  "Time Limit Exceeded": "text-orange-700",
-};
-const difficultyStyles: Record<ProblemDetail["difficulty"], string> = {
-  Easy: "bg-emerald-50 text-emerald-700 ring-emerald-600/15",
-  Medium: "bg-amber-50 text-amber-700 ring-amber-600/15",
-  Hard: "bg-rose-50 text-rose-700 ring-rose-600/15",
-};
+import { DIFFICULTY_PRESENTATION } from "@/lib/constants/difficulty";
+import { VERDICT_PRESENTATION } from "@/lib/constants/verdict";
 
 function CodeValue({ children }: { children?: string }) {
   return (
@@ -39,7 +29,9 @@ export default function SolveProblem() {
   const { slug } = useParams();
   const [problem, setProblem] = useState<ProblemDetail | null>(null);
   const [submission, setSubmission] = useState<Submission | null>(null);
-  const [activeSubmissionId, setActiveSubmissionId] = useState<string | null>(null);
+  const [activeSubmissionId, setActiveSubmissionId] = useState<string | null>(
+    null,
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [code, setCode] = useState("function solve() {\n\n}");
   const [language, setLanguage] = useState("");
@@ -83,7 +75,7 @@ export default function SolveProblem() {
       setCode(starter?.code ?? "");
     } catch (err) {
       console.error(err);
-      toast.add({ type: "failure", description: "Failed to fetch question" });
+      toast.add({ type: "error", description: "Failed to fetch question" });
     }
   };
 
@@ -124,7 +116,7 @@ export default function SolveProblem() {
         setIsSubmitting(false);
         console.error(err);
         toast.add({
-          type: "failure",
+          type: "error",
           description: "Failed to fetch submission",
         });
       }
@@ -136,7 +128,7 @@ export default function SolveProblem() {
     const events = new EventSource(
       `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/events/stream`,
       {
-      withCredentials: true,
+        withCredentials: true,
       },
     );
     const handleCompleted = async (event: MessageEvent<string>) => {
@@ -169,7 +161,7 @@ export default function SolveProblem() {
       pollSubmission(data.submissionId);
     } catch (err) {
       console.error(err);
-      toast.add({ type: "failure", description: "Failed to submit solution" });
+      toast.add({ type: "error", description: "Failed to submit solution" });
       setIsSubmitting(false);
     }
   };
@@ -191,7 +183,7 @@ export default function SolveProblem() {
               </h1>
               {problem && (
                 <span
-                  className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${difficultyStyles[problem.difficulty]}`}
+                  className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${DIFFICULTY_PRESENTATION[problem.difficulty].badge}`}
                 >
                   {problem.difficulty}
                 </span>
@@ -279,7 +271,7 @@ export default function SolveProblem() {
             setIsResizing(true);
           }}
         />
-        <section className="flex min-h-[42rem] min-w-0 flex-1 flex-col bg-slate-950 md:min-h-0">
+        <section className="flex min-h-168 min-w-0 flex-1 flex-col bg-slate-950 md:min-h-0">
           <div className="flex h-14 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900 px-4 sm:px-5">
             <select
               aria-label="Language"
@@ -292,9 +284,11 @@ export default function SolveProblem() {
               <option value="python">Python</option>
             </select>
             <Button
+              type="button"
+              variant="default"
               onClick={submitProblem}
               disabled={isSubmitting || !problem}
-              className="inline-flex min-w-24 items-center justify-center gap-2 rounded-md bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+              className="min-w-24 bg-emerald-500 text-emerald-950 hover:bg-emerald-400"
             >
               {isSubmitting && (
                 <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-emerald-950/30 border-t-emerald-950" />
@@ -340,7 +334,7 @@ export default function SolveProblem() {
             ) : (
               <div className="mt-3">
                 <p
-                  className={`text-lg font-semibold ${verdictStyles[submission.verdict] ?? "text-slate-900"}`}
+                  className={`text-lg font-semibold ${VERDICT_PRESENTATION[submission.verdict ?? "pending"]?.className ?? VERDICT_PRESENTATION.pending.className}`}
                 >
                   {submission.verdict}
                 </p>
