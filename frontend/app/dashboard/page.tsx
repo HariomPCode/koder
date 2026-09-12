@@ -54,7 +54,23 @@ function DashboardContent() {
   const latestSubmission = stats.recentSubmissions[0]?.createdAt ?? null;
 
   return <main className="mx-auto w-full max-w-7xl p-6 sm:p-8">
-    <header className="mb-8"><h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Welcome back, {user?.firstName || "there"} <span aria-hidden="true">👋</span></h1><p className="mt-2 text-sm text-muted-foreground sm:text-base">Keep solving problems and improve your coding skills.</p></header>
+    <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+          Welcome back, {user?.firstName || "there"}{" "}
+          <span aria-hidden="true">👋</span>
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground sm:text-base">
+          Keep solving problems and improve your coding skills.
+        </p>
+      </div>
+      <Link
+        href="/profile"
+        className="text-sm font-semibold text-foreground underline underline-offset-4"
+      >
+        View profile
+      </Link>
+    </header>
 
     <section aria-label="Progress overview" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <StatCard title="Solved" value={stats.solvedCount} detail={stats.activity.weeklySolved ? `+${stats.activity.weeklySolved} solved this week` : "Problems solved"} />

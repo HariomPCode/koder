@@ -6,10 +6,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "@/lib/api-client";
 import { toast } from "@/components/ui/toast";
-import {
-  getEditorCode,
-  writePersistedEditorCode,
-} from "@/lib/editor-storage";
+import { getEditorCode, writePersistedEditorCode } from "@/lib/editor-storage";
 import type {
   ProblemDetail,
   StarterCode,
@@ -33,9 +30,9 @@ export default function SolveProblem() {
     null,
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submissionUpdateError, setSubmissionUpdateError] = useState<string | null>(
-    null,
-  );
+  const [submissionUpdateError, setSubmissionUpdateError] = useState<
+    string | null
+  >(null);
   const [code, setCode] = useState("function solve() {\n\n}");
   const [language, setLanguage] = useState("");
   const [isDesktop, setIsDesktop] = useState(false);
@@ -44,8 +41,7 @@ export default function SolveProblem() {
     isResizing,
     handlePointerDown,
     adjustLeftPanelWidth,
-  } =
-    useResizablePanes();
+  } = useResizablePanes();
 
   const handleResizeKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "ArrowLeft") {
@@ -78,7 +74,7 @@ export default function SolveProblem() {
       setCode(
         problemSlug
           ? getEditorCode(problemSlug, "javascript", starter?.code ?? "")
-          : starter?.code ?? "",
+          : (starter?.code ?? ""),
       );
     } catch (err) {
       console.error(err);
@@ -89,7 +85,7 @@ export default function SolveProblem() {
   useEffect(() => {
     // Load the selected problem when the dynamic route parameter is available.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (problemSlug) void fetchQuestion();
+    if (slug) void fetchQuestion();
     // The loader is stable for this page and only the route parameter controls this effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [problemSlug]);
