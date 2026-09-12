@@ -26,6 +26,7 @@ export interface User {
   rating?: number;
   highestRating?: number;
   contestsParticipated?: number;
+  createdAt?: string;
 }
 
 export interface AuthResponse {
@@ -56,6 +57,23 @@ export interface ProblemDetail extends ProblemListItem {
   constraints: string[];
   sampleTestCases: TestCase[];
   starterCode: StarterCode[];
+  functionName?: string;
+  parameters?: ProblemParameter[];
+  returnType?: string;
+  hiddenTestCases?: TestCase[];
+}
+
+export interface ProblemParameter {
+  name: string;
+  type: string;
+}
+
+export interface AdminQuestion extends ProblemDetail {
+  questionNum: number;
+  hiddenTestCases: TestCase[];
+  functionName: string;
+  parameters: ProblemParameter[];
+  returnType: string;
 }
 
 export interface FailedTestCase {
@@ -146,4 +164,87 @@ export interface SubmissionResponse {
 export interface QuestionSubmissionsResponse {
   message?: string;
   submissions?: Submission[];
+}
+
+export type ContestStatus =
+  | "DRAFT"
+  | "SCHEDULED"
+  | "REGISTRATION"
+  | "RUNNING"
+  | "ENDED"
+  | "FINALIZED";
+
+export interface ContestProblem {
+  questionId: string;
+  order: number;
+  points: number;
+  penaltyMinutes: number;
+}
+
+export interface Contest {
+  _id: string;
+  title: string;
+  slug: string;
+  description?: string;
+  registrationOpenTime: string;
+  startTime: string;
+  endTime: string;
+  status: ContestStatus;
+  problems: ContestProblem[];
+}
+
+export interface ContestProblemInput {
+  questionId: string;
+  order: number;
+  points: number;
+  penaltyMinutes: number;
+}
+
+export interface ContestListResponse {
+  contests: Contest[];
+  pagination: Pagination;
+}
+
+export interface ContestDetailResponse {
+  contest: Contest;
+  registered: boolean;
+}
+
+export interface ContestProblemItem extends ContestProblem {
+  question: ProblemDetail | null;
+}
+
+export interface ContestProblemsResponse {
+  contest: Contest;
+  problems: ContestProblemItem[];
+}
+
+export interface ContestSubmissionCreateResponse {
+  submissionId: string;
+  status: string;
+}
+
+export interface Standing {
+  userId: string;
+  rank: number;
+  solvedCount: number;
+  score: number;
+  penalty: number;
+  lastAcceptedAt?: string;
+  user?: Pick<User, "_id" | "firstName" | "lastName" | "email">;
+}
+
+export interface ContestStandingsResponse {
+  contestId: string;
+  status: ContestStatus;
+  standings: Standing[];
+  pagination: Pagination;
+}
+
+export interface MyStandingResponse {
+  contestId: string;
+  standing?: Standing | null;
+  rank?: number;
+  score?: number;
+  penalty?: number;
 }
