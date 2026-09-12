@@ -1,29 +1,23 @@
 "use client";
 
 import Editor from "@monaco-editor/react";
-import { Button } from "@/components/ui/button";
-import { toast } from "@/components/ui/toast";
-import { api } from "@/lib/api-client";
-import type {
-  ProblemDetail,
-  Submission,
-  SubmissionCreateResponse,
-  SubmissionResponse,
-  StarterCode,
-} from "@/types/api";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { DIFFICULTY_PRESENTATION } from "@/lib/constants/difficulty";
-import { VERDICT_PRESENTATION } from "@/lib/constants/verdict";
-
-function CodeValue({ children }: { children?: string }) {
-  return (
-    <pre className="mt-1.5 overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-xs leading-5 text-muted-foreground whitespace-pre-wrap">
-      {children || "—"}
-    </pre>
-  );
-}
+import { api } from "@/lib/api-client";
+import { toast } from "@/components/ui/toast";
+import type {
+  ProblemDetail,
+  StarterCode,
+  Submission,
+  SubmissionCreateResponse,
+  SubmissionResponse,
+} from "@/types/api";
+import { EditorToolbar } from "@/features/workspace/EditorToolbar";
+import { ResizeHandle } from "@/features/workspace/ResizeHandle";
+import { ResultDrawer } from "@/features/workspace/ResultDrawer";
+import { StatementPane } from "@/features/workspace/StatementPane";
+import { useResizablePanes } from "@/features/workspace/useResizablePanes";
 
 export default function SolveProblem() {
   const { slug } = useParams();
@@ -35,9 +29,9 @@ export default function SolveProblem() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [code, setCode] = useState("function solve() {\n\n}");
   const [language, setLanguage] = useState("");
-  const [leftPanelWidth, setLeftPanelWidth] = useState(46);
   const [isDesktop, setIsDesktop] = useState(false);
-  const [isResizing, setIsResizing] = useState(false);
+  const { leftPanelWidth, isResizing, handlePointerDown } =
+    useResizablePanes();
 
   useEffect(() => {
     const media = window.matchMedia("(min-width: 768px)");
@@ -46,21 +40,6 @@ export default function SolveProblem() {
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   }, []);
-
-  useEffect(() => {
-    if (!isResizing) return;
-    const resize = (event: PointerEvent) =>
-      setLeftPanelWidth(
-        Math.min(64, Math.max(34, (event.clientX / window.innerWidth) * 100)),
-      );
-    const stop = () => setIsResizing(false);
-    window.addEventListener("pointermove", resize);
-    window.addEventListener("pointerup", stop);
-    return () => {
-      window.removeEventListener("pointermove", resize);
-      window.removeEventListener("pointerup", stop);
-    };
-  }, [isResizing]);
 
   const fetchQuestion = async () => {
     try {
@@ -166,140 +145,25 @@ export default function SolveProblem() {
     }
   };
 
-  const failedTest = submission?.failedTestCase;
   return (
     <main className="flex min-h-0 flex-1 flex-col bg-background md:h-[calc(100dvh-4rem)]">
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <section
-          className="min-h-0 shrink-0 overflow-y-auto border-b border-border bg-card md:border-b-0 md:border-r"
-          style={isDesktop ? { width: `${leftPanelWidth}%` } : undefined}
-        >
-          <div className="mx-auto max-w-3xl px-5 py-7 sm:px-7">
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-                {problem
-                  ? `${problem.questionNum}. ${problem.title}`
-                  : "Loading problem…"}
-              </h1>
-              {problem && (
-                <span
-                  className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${DIFFICULTY_PRESENTATION[problem.difficulty].badge}`}
-                >
-                  {problem.difficulty}
-                </span>
-              )}
-            </div>
-            {problem && (
-              <section className="mt-8">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                  Description
-                </h2>
-                <p className="mt-3 whitespace-pre-wrap leading-7 text-foreground">
-                  {problem.description}
-                </p>
-              </section>
-            )}
-            {problem && (
-              <section className="mt-9">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                  Examples
-                </h2>
-                <div className="mt-4 space-y-5">
-                  {problem.sampleTestCases.map((testcase, index) => (
-                    <div key={index}>
-                      <h3 className="text-sm font-semibold text-foreground">
-                        Example {index + 1}
-                      </h3>
-                      <div className="mt-2 grid gap-3">
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground">
-                            Input
-                          </p>
-                          <CodeValue>{testcase.input}</CodeValue>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground">
-                            Output
-                          </p>
-                          <CodeValue>{testcase.output}</CodeValue>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-            {problem && (
-              <section className="mt-9">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                  Constraints
-                </h2>
-                <ul className="mt-3 space-y-2 text-sm leading-6 text-foreground">
-                  {problem.constraints.map((constraint, index) => (
-                    <li key={index} className="flex gap-2">
-                      <span className="text-muted-foreground">•</span>
-                      <span>{constraint}</span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-            {problem && (
-              <section className="mt-9">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                  Topics
-                </h2>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {problem.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </section>
-            )}
-          </div>
-        </section>
-        <div
-          aria-label="Resize problem and editor panels"
-          className={`hidden w-1 shrink-0 cursor-col-resize bg-border transition-colors hover:bg-primary md:block ${isResizing ? "bg-primary" : ""}`}
-          onPointerDown={(event) => {
-            event.currentTarget.setPointerCapture(event.pointerId);
-            setIsResizing(true);
-          }}
+        <div style={isDesktop ? { width: `${leftPanelWidth}%` } : undefined}>
+          <StatementPane problem={problem} />
+        </div>
+        <ResizeHandle
+          isResizing={isResizing}
+          onPointerDown={handlePointerDown}
         />
         <section className="flex min-h-168 min-w-0 flex-1 flex-col bg-zinc-950 md:min-h-0">
-          <div className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-800 bg-zinc-900 px-4 sm:px-5">
-            <select
-              aria-label="Language"
-              value={language}
-              onChange={handleLanguageChange}
-              className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-100 outline-none focus:border-primary"
-            >
-              <option value="javascript">JavaScript</option>
-              <option value="java">Java</option>
-              <option value="python">Python</option>
-            </select>
-            <Button
-              type="button"
-              variant="default"
-              onClick={submitProblem}
-              disabled={isSubmitting || !problem}
-              className="min-w-24 bg-emerald-500 text-emerald-950 hover:bg-emerald-400"
-            >
-              {isSubmitting && (
-                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-emerald-950/30 border-t-emerald-950" />
-              )}
-              {isSubmitting
-                ? "Submitting..."
-                : submission
-                  ? "Submitted"
-                  : "Submit"}
-            </Button>
-          </div>
+          <EditorToolbar
+            language={language}
+            problem={problem}
+            submission={submission}
+            isSubmitting={isSubmitting}
+            onLanguageChange={handleLanguageChange}
+            onSubmit={submitProblem}
+          />
           <div className="min-h-0 flex-1">
             <Editor
               height="100%"
@@ -323,76 +187,7 @@ export default function SolveProblem() {
               }}
             />
           </div>
-          <section className="max-h-[38%] shrink-0 overflow-y-auto border-t border-zinc-800 bg-card px-4 py-4 sm:px-5">
-            <h2 className="text-sm font-semibold text-foreground">
-              Submission Result
-            </h2>
-            {!submission ? (
-              <p className="mt-2 text-sm text-muted-foreground">
-                Submit your solution to see the result.
-              </p>
-            ) : (
-              <div className="mt-3">
-                <p
-                  className={`text-lg font-semibold ${VERDICT_PRESENTATION[submission.verdict ?? "pending"]?.className ?? VERDICT_PRESENTATION.pending.className}`}
-                >
-                  {submission.verdict}
-                </p>
-                <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
-                  <span>
-                    <strong className="font-medium text-foreground">
-                      Passed
-                    </strong>{" "}
-                    {submission.passedTestCases} / {submission.totalTestCases}{" "}
-                    tests
-                  </span>
-                  <span>
-                    <strong className="font-medium text-foreground">
-                      Runtime
-                    </strong>{" "}
-                    {submission.maxRuntime} ms
-                  </span>
-                </div>
-                {submission.errorMessage && (
-                  <div className="mt-4">
-                    <p className="text-sm font-medium text-foreground">
-                      Failure reason
-                    </p>
-                    <pre className="mt-1.5 max-h-40 overflow-auto rounded-md border border-rose-200 bg-rose-50 p-3 font-mono text-xs leading-5 text-rose-800 whitespace-pre-wrap">
-                      {submission.errorMessage}
-                    </pre>
-                  </div>
-                )}
-                {submission.verdict === "Wrong Answer" && failedTest && (
-                  <div className="mt-4">
-                    <p className="text-sm font-medium text-foreground">
-                      Failed Test Case
-                    </p>
-                    <div className="mt-2 grid gap-3 sm:grid-cols-3">
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground">
-                          Input
-                        </p>
-                        <CodeValue>{failedTest.input}</CodeValue>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground">
-                          Expected
-                        </p>
-                        <CodeValue>{failedTest.expected}</CodeValue>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground">
-                          Your Output
-                        </p>
-                        <CodeValue>{failedTest.received}</CodeValue>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
+          <ResultDrawer submission={submission} />
         </section>
       </div>
     </main>
