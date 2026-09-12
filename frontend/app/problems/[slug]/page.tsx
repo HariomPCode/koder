@@ -22,6 +22,7 @@ import { ResizeHandle } from "@/features/workspace/ResizeHandle";
 import { ResultDrawer } from "@/features/workspace/ResultDrawer";
 import { StatementPane } from "@/features/workspace/StatementPane";
 import { useResizablePanes } from "@/features/workspace/useResizablePanes";
+import { getSubmissionErrorMessage } from "@/lib/api/submissions";
 
 export default function SolveProblem() {
   const { slug } = useParams();
@@ -35,8 +36,23 @@ export default function SolveProblem() {
   const [code, setCode] = useState("function solve() {\n\n}");
   const [language, setLanguage] = useState("");
   const [isDesktop, setIsDesktop] = useState(false);
-  const { leftPanelWidth, isResizing, handlePointerDown } =
+  const {
+    leftPanelWidth,
+    isResizing,
+    handlePointerDown,
+    adjustLeftPanelWidth,
+  } =
     useResizablePanes();
+
+  const handleResizeKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      adjustLeftPanelWidth(-4);
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      adjustLeftPanelWidth(4);
+    }
+  };
 
   useEffect(() => {
     const media = window.matchMedia("(min-width: 768px)");
@@ -164,22 +180,37 @@ export default function SolveProblem() {
       pollSubmission(data.submissionId);
     } catch (err) {
       console.error(err);
-      toast.add({ type: "error", description: "Failed to submit solution" });
+      toast.add({
+        type: "error",
+        description: getSubmissionErrorMessage(err),
+      });
       setIsSubmitting(false);
     }
   };
 
   return (
     <main className="flex min-h-0 flex-1 flex-col bg-background md:h-[calc(100dvh-4rem)]">
+      <a
+        href="#editor-workspace"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-background focus:px-4 focus:py-2 focus:text-foreground"
+      >
+        Skip to editor
+      </a>
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <div style={isDesktop ? { width: `${leftPanelWidth}%` } : undefined}>
           <StatementPane problem={problem} />
         </div>
         <ResizeHandle
+          leftPanelWidth={leftPanelWidth}
           isResizing={isResizing}
+          onKeyDown={handleResizeKeyDown}
           onPointerDown={handlePointerDown}
         />
-        <section className="flex min-h-168 min-w-0 flex-1 flex-col bg-zinc-950 md:min-h-0">
+        <section
+          id="editor-workspace"
+          tabIndex={-1}
+          className="flex min-h-168 min-w-0 flex-1 flex-col bg-zinc-950 outline-none md:min-h-0"
+        >
           <EditorToolbar
             language={language}
             problem={problem}

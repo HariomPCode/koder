@@ -1,10 +1,14 @@
 import type { Submission } from "@/types/api";
 
 import { VERDICT_PRESENTATION } from "@/lib/constants/verdict";
+import { getSubmissionStatusPresentation } from "@/lib/constants/submissionStatus";
 import { WorkspaceCodeValue } from "./WorkspaceCodeValue";
 
 export function ResultDrawer({ submission }: { submission: Submission | null }) {
   const failedTest = submission?.failedTestCase;
+  const statusPresentation = submission
+    ? getSubmissionStatusPresentation(submission.status)
+    : null;
 
   return (
     <section className="max-h-[38%] shrink-0 overflow-y-auto border-t border-zinc-800 bg-card px-4 py-4 sm:px-5">
@@ -15,10 +19,19 @@ export function ResultDrawer({ submission }: { submission: Submission | null }) 
         </p>
       ) : (
         <div className="mt-3">
+          {submission.status !== "completed" && statusPresentation ? (
+            <div
+              className={`mb-3 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${statusPresentation.className}`}
+            >
+              {statusPresentation.label}
+            </div>
+          ) : null}
           <p
             className={`text-lg font-semibold ${VERDICT_PRESENTATION[submission.verdict ?? "pending"]?.className ?? VERDICT_PRESENTATION.pending.className}`}
           >
-            {submission.verdict}
+            {submission.status === "completed"
+              ? submission.verdict
+              : "Submission in progress"}
           </p>
           <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
             <span>

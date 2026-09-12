@@ -142,3 +142,8 @@ export interface QuestionResponse {
 export interface SubmissionResponse {
   submission: Submission;
 }
+
+export interface QuestionSubmissionsResponse {
+  message?: string;
+  submissions?: Submission[];
+}
