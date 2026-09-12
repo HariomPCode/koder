@@ -19,7 +19,7 @@ import { VERDICT_PRESENTATION } from "@/lib/constants/verdict";
 
 function CodeValue({ children }: { children?: string }) {
   return (
-    <pre className="mt-1.5 overflow-x-auto rounded-md bg-slate-100 px-3 py-2 font-mono text-xs leading-5 text-slate-700 whitespace-pre-wrap">
+    <pre className="mt-1.5 overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-xs leading-5 text-muted-foreground whitespace-pre-wrap">
       {children || "—"}
     </pre>
   );
@@ -168,15 +168,15 @@ export default function SolveProblem() {
 
   const failedTest = submission?.failedTestCase;
   return (
-    <main className="flex min-h-0 flex-1 flex-col bg-slate-100 md:h-[calc(100dvh-4rem)]">
+    <main className="flex min-h-0 flex-1 flex-col bg-background md:h-[calc(100dvh-4rem)]">
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <section
-          className="min-h-0 shrink-0 overflow-y-auto border-b border-slate-200 bg-white md:border-b-0 md:border-r"
+          className="min-h-0 shrink-0 overflow-y-auto border-b border-border bg-card md:border-b-0 md:border-r"
           style={isDesktop ? { width: `${leftPanelWidth}%` } : undefined}
         >
           <div className="mx-auto max-w-3xl px-5 py-7 sm:px-7">
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
+              <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
                 {problem
                   ? `${problem.questionNum}. ${problem.title}`
                   : "Loading problem…"}
@@ -191,34 +191,34 @@ export default function SolveProblem() {
             </div>
             {problem && (
               <section className="mt-8">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                   Description
                 </h2>
-                <p className="mt-3 whitespace-pre-wrap leading-7 text-slate-700">
+                <p className="mt-3 whitespace-pre-wrap leading-7 text-foreground">
                   {problem.description}
                 </p>
               </section>
             )}
             {problem && (
               <section className="mt-9">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                   Examples
                 </h2>
                 <div className="mt-4 space-y-5">
                   {problem.sampleTestCases.map((testcase, index) => (
                     <div key={index}>
-                      <h3 className="text-sm font-semibold text-slate-800">
+                      <h3 className="text-sm font-semibold text-foreground">
                         Example {index + 1}
                       </h3>
                       <div className="mt-2 grid gap-3">
                         <div>
-                          <p className="text-xs font-medium text-slate-500">
+                          <p className="text-xs font-medium text-muted-foreground">
                             Input
                           </p>
                           <CodeValue>{testcase.input}</CodeValue>
                         </div>
                         <div>
-                          <p className="text-xs font-medium text-slate-500">
+                          <p className="text-xs font-medium text-muted-foreground">
                             Output
                           </p>
                           <CodeValue>{testcase.output}</CodeValue>
@@ -231,13 +231,13 @@ export default function SolveProblem() {
             )}
             {problem && (
               <section className="mt-9">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                   Constraints
                 </h2>
-                <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
+                <ul className="mt-3 space-y-2 text-sm leading-6 text-foreground">
                   {problem.constraints.map((constraint, index) => (
                     <li key={index} className="flex gap-2">
-                      <span className="text-slate-400">•</span>
+                      <span className="text-muted-foreground">•</span>
                       <span>{constraint}</span>
                     </li>
                   ))}
@@ -246,14 +246,14 @@ export default function SolveProblem() {
             )}
             {problem && (
               <section className="mt-9">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                   Topics
                 </h2>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {problem.tags.map((tag) => (
                     <span
                       key={tag}
-                      className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600"
+                      className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground"
                     >
                       {tag}
                     </span>
@@ -265,19 +265,19 @@ export default function SolveProblem() {
         </section>
         <div
           aria-label="Resize problem and editor panels"
-          className={`hidden w-1 shrink-0 cursor-col-resize bg-slate-200 transition-colors hover:bg-emerald-400 md:block ${isResizing ? "bg-emerald-500" : ""}`}
+          className={`hidden w-1 shrink-0 cursor-col-resize bg-border transition-colors hover:bg-primary md:block ${isResizing ? "bg-primary" : ""}`}
           onPointerDown={(event) => {
             event.currentTarget.setPointerCapture(event.pointerId);
             setIsResizing(true);
           }}
         />
-        <section className="flex min-h-168 min-w-0 flex-1 flex-col bg-slate-950 md:min-h-0">
-          <div className="flex h-14 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900 px-4 sm:px-5">
+        <section className="flex min-h-168 min-w-0 flex-1 flex-col bg-zinc-950 md:min-h-0">
+          <div className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-800 bg-zinc-900 px-4 sm:px-5">
             <select
               aria-label="Language"
               value={language}
               onChange={handleLanguageChange}
-              className="rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm font-medium text-slate-100 outline-none focus:border-emerald-500"
+              className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-100 outline-none focus:border-primary"
             >
               <option value="javascript">JavaScript</option>
               <option value="java">Java</option>
@@ -323,12 +323,12 @@ export default function SolveProblem() {
               }}
             />
           </div>
-          <section className="max-h-[38%] shrink-0 overflow-y-auto border-t border-slate-800 bg-white px-4 py-4 sm:px-5">
-            <h2 className="text-sm font-semibold text-slate-900">
+          <section className="max-h-[38%] shrink-0 overflow-y-auto border-t border-zinc-800 bg-card px-4 py-4 sm:px-5">
+            <h2 className="text-sm font-semibold text-foreground">
               Submission Result
             </h2>
             {!submission ? (
-              <p className="mt-2 text-sm text-slate-500">
+              <p className="mt-2 text-sm text-muted-foreground">
                 Submit your solution to see the result.
               </p>
             ) : (
@@ -338,16 +338,16 @@ export default function SolveProblem() {
                 >
                   {submission.verdict}
                 </p>
-                <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-slate-600">
+                <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
                   <span>
-                    <strong className="font-medium text-slate-800">
+                    <strong className="font-medium text-foreground">
                       Passed
                     </strong>{" "}
                     {submission.passedTestCases} / {submission.totalTestCases}{" "}
                     tests
                   </span>
                   <span>
-                    <strong className="font-medium text-slate-800">
+                    <strong className="font-medium text-foreground">
                       Runtime
                     </strong>{" "}
                     {submission.maxRuntime} ms
@@ -355,7 +355,7 @@ export default function SolveProblem() {
                 </div>
                 {submission.errorMessage && (
                   <div className="mt-4">
-                    <p className="text-sm font-medium text-slate-800">
+                    <p className="text-sm font-medium text-foreground">
                       Failure reason
                     </p>
                     <pre className="mt-1.5 max-h-40 overflow-auto rounded-md border border-rose-200 bg-rose-50 p-3 font-mono text-xs leading-5 text-rose-800 whitespace-pre-wrap">
@@ -365,24 +365,24 @@ export default function SolveProblem() {
                 )}
                 {submission.verdict === "Wrong Answer" && failedTest && (
                   <div className="mt-4">
-                    <p className="text-sm font-medium text-slate-800">
+                    <p className="text-sm font-medium text-foreground">
                       Failed Test Case
                     </p>
                     <div className="mt-2 grid gap-3 sm:grid-cols-3">
                       <div>
-                        <p className="text-xs font-medium text-slate-500">
+                        <p className="text-xs font-medium text-muted-foreground">
                           Input
                         </p>
                         <CodeValue>{failedTest.input}</CodeValue>
                       </div>
                       <div>
-                        <p className="text-xs font-medium text-slate-500">
+                        <p className="text-xs font-medium text-muted-foreground">
                           Expected
                         </p>
                         <CodeValue>{failedTest.expected}</CodeValue>
                       </div>
                       <div>
-                        <p className="text-xs font-medium text-slate-500">
+                        <p className="text-xs font-medium text-muted-foreground">
                           Your Output
                         </p>
                         <CodeValue>{failedTest.received}</CodeValue>
