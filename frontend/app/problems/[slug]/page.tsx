@@ -6,6 +6,10 @@ import { useEffect, useState } from "react";
 
 import { api } from "@/lib/api-client";
 import { toast } from "@/components/ui/toast";
+import {
+  getEditorCode,
+  writePersistedEditorCode,
+} from "@/lib/editor-storage";
 import type {
   ProblemDetail,
   StarterCode,
@@ -21,6 +25,7 @@ import { useResizablePanes } from "@/features/workspace/useResizablePanes";
 
 export default function SolveProblem() {
   const { slug } = useParams();
+  const problemSlug = Array.isArray(slug) ? slug[0] : slug;
   const [problem, setProblem] = useState<ProblemDetail | null>(null);
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [activeSubmissionId, setActiveSubmissionId] = useState<string | null>(
@@ -51,7 +56,11 @@ export default function SolveProblem() {
         (item: StarterCode) => item.language === "javascript",
       );
       setLanguage("javascript");
-      setCode(starter?.code ?? "");
+      setCode(
+        problemSlug
+          ? getEditorCode(problemSlug, "javascript", starter?.code ?? "")
+          : starter?.code ?? "",
+      );
     } catch (err) {
       console.error(err);
       toast.add({ type: "error", description: "Failed to fetch question" });
@@ -61,21 +70,36 @@ export default function SolveProblem() {
   useEffect(() => {
     // Load the selected problem when the dynamic route parameter is available.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (slug) void fetchQuestion();
+    if (problemSlug) void fetchQuestion();
     // The loader is stable for this page and only the route parameter controls this effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug]);
+  }, [problemSlug]);
 
   const handleLanguageChange = (
     event: React.ChangeEvent<HTMLSelectElement>,
   ) => {
     const newLanguage = event.target.value;
+    if (problemSlug && language) {
+      writePersistedEditorCode(problemSlug, language, code);
+    }
     setLanguage(newLanguage);
-    setCode(
+    const starterCode =
       problem?.starterCode.find((item) => item.language === newLanguage)
-        ?.code ?? "",
+        ?.code ?? "";
+    setCode(
+      problemSlug
+        ? getEditorCode(problemSlug, newLanguage, starterCode)
+        : starterCode,
     );
     setSubmission(null);
+  };
+
+  const handleCodeChange = (value: string | undefined) => {
+    const nextCode = value ?? "";
+    setCode(nextCode);
+    if (problemSlug && language) {
+      writePersistedEditorCode(problemSlug, language, nextCode);
+    }
   };
 
   const pollSubmission = (submissionId: string) => {
@@ -170,7 +194,7 @@ export default function SolveProblem() {
               language={language}
               theme="vs-dark"
               value={code}
-              onChange={(value) => setCode(value ?? "")}
+              onChange={handleCodeChange}
               options={{
                 fontSize: 14,
                 fontFamily:
