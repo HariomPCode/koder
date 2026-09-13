@@ -70,6 +70,22 @@ describe("AuthProvider", () => {
     expect(screen.getByTestId("user")).toHaveTextContent("none");
   });
 
+  it("does not poison authenticated state after a scoped 403", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ user });
+
+    renderAuth();
+    await waitFor(() =>
+      expect(screen.getByTestId("status")).toHaveTextContent("authenticated"),
+    );
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent("koder:scoped-forbidden"));
+    });
+
+    expect(screen.getByTestId("status")).toHaveTextContent("authenticated");
+    expect(screen.getByTestId("user")).toHaveTextContent(user.email);
+  });
+
   it("clears authenticated state immediately on logout", async () => {
     vi.spyOn(api, "get").mockResolvedValue({ user });
     vi.spyOn(api, "post").mockResolvedValue({ message: "signed out" });

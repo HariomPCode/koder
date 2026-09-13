@@ -39,7 +39,6 @@ vi.mock("@/hooks/useAuth", () => ({
     ...authState,
     loading: authState.status === "checking",
     error: null,
-    accessDenied: false,
     refreshUser: async () => true,
     logout: async () => {},
   }),

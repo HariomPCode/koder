@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api } from "@/lib/api-client";
+import { api, AUTH_EXPIRED_EVENT } from "@/lib/api-client";
 
 describe("api client", () => {
   afterEach(() => {
@@ -46,5 +46,28 @@ describe("api client", () => {
       status: 401,
       message: "Unauthenticated User",
     });
+  });
+
+  it("keeps scoped 403 responses local without dispatching a global auth event", async () => {
+    process.env.NEXT_PUBLIC_BACKEND_URL = "http://localhost:5000";
+    const forbiddenEvent = vi.fn();
+    window.addEventListener("koder:auth-forbidden", forbiddenEvent);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({ message: "You must register before viewing contest problems" }),
+        {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+
+    await expect(api.get("/api/v1/contests/contest-1/problems")).rejects.toMatchObject({
+      status: 403,
+      message: "You must register before viewing contest problems",
+    });
+    expect(forbiddenEvent).not.toHaveBeenCalled();
+    expect(AUTH_EXPIRED_EVENT).toBe("koder:auth-expired");
+    window.removeEventListener("koder:auth-forbidden", forbiddenEvent);
   });
 });

@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 
 export function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { status, error, accessDenied } = useRequireAuth();
+  const { status, error } = useRequireAuth();
 
   if (status === "checking") {
     return (
@@ -23,16 +23,6 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
         title="Authentication unavailable"
         description={error ?? "Unable to verify your session."}
         action={{ label: "Try again", onClick: () => window.location.reload() }}
-      />
-    );
-  }
-
-  if (accessDenied) {
-    return (
-      <ErrorState
-        className="mx-auto mt-12 max-w-xl"
-        title="Access denied"
-        description="You do not have permission to access this resource."
       />
     );
   }

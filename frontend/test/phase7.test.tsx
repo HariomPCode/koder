@@ -7,6 +7,7 @@ import { MyStanding } from "@/features/contests/MyStanding";
 import { QuestionForm } from "@/features/admin/QuestionForm";
 import { ContestForm } from "@/features/admin/ContestForm";
 import { AdminGate } from "@/features/admin/AdminGate";
+import ContestDetailPage from "@/app/contests/[id]/page";
 import { ApiError } from "@/lib/api-client";
 import type { Contest } from "@/types/api";
 
@@ -30,10 +31,15 @@ vi.mock("@/lib/api-client", async (importOriginal) => {
   return { ...actual, api: contestMock };
 });
 vi.mock("@/hooks/useRequireAuth", () => ({
-  useRequireAuth: () => ({ status: "authenticated", error: null, accessDenied: false }),
+  useRequireAuth: () => ({ status: "authenticated", error: null }),
 }));
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => authState,
+}));
+vi.mock("next/navigation", () => ({
+  useParams: () => ({ id: "contest-1" }),
+  usePathname: () => "/contests/contest-1",
+  useRouter: () => ({ replace: vi.fn() }),
 }));
 
 const contest: Contest = {
@@ -56,6 +62,70 @@ afterEach(() => {
 });
 
 describe("Phase 7 contest surfaces", () => {
+  function renderContestDetail(status: Contest["status"], registered = false) {
+    contestMock.get.mockResolvedValue({
+      contest: { ...contest, status },
+      registered,
+    });
+    render(<ContestDetailPage />);
+  }
+
+  it("enables registration only during the registration window", async () => {
+    renderContestDetail("REGISTRATION");
+
+    const register = await screen.findByRole("button", { name: "Register" });
+    expect(register).toBeEnabled();
+  });
+
+  it("disables registration during a running contest", async () => {
+    renderContestDetail("RUNNING");
+
+    const register = await screen.findByRole("button", { name: "Register" });
+    expect(register).toBeDisabled();
+  });
+
+  it("keeps the contest page usable and shows a local error when registration fails", async () => {
+    renderContestDetail("REGISTRATION");
+    contestMock.post.mockRejectedValue(
+      new ApiError(403, { message: "Registration is closed for this contest" }),
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Register" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("Registration is closed for this contest"),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByRole("heading", { name: "Spring Challenge" })).toBeInTheDocument();
+    expect(
+      screen.queryByText("Unable to load contest"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("updates registration state from a successful registration response", async () => {
+    renderContestDetail("REGISTRATION");
+    contestMock.post.mockResolvedValue({ registered: true });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Register" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Unregister" })).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("Contest problems")).toBeInTheDocument();
+  });
+
+  it("keeps unregistration available only during registration", async () => {
+    renderContestDetail("REGISTRATION", true);
+    contestMock.delete.mockResolvedValue({ removed: true });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Unregister" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Register" })).toBeInTheDocument(),
+    );
+  });
+
   it("renders contest cards and links to the contest detail", () => {
     render(<ContestCard contest={contest} />);
     expect(screen.getByText("Spring Challenge")).toBeInTheDocument();

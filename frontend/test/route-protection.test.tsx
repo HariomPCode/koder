@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AuthContext } from "@/context/AuthContext";
 import { RequireAuth } from "@/components/auth/RequireAuth";
+import { AdminGate } from "@/features/admin/AdminGate";
 
 const replace = vi.fn();
 
@@ -25,7 +26,6 @@ function renderWithStatus(status: "authenticated" | "unauthenticated") {
         loading: false,
         status,
         error: null,
-        accessDenied: false,
         refreshUser: async () => true,
         logout: async () => {},
       }}
@@ -54,5 +54,34 @@ describe("RequireAuth", () => {
     renderWithStatus("authenticated");
     expect(screen.getByText("protected content")).toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("keeps admin-only access denied for authenticated non-admin users", () => {
+    render(
+      <AuthContext.Provider
+        value={{
+          user: {
+            _id: "user-1",
+            firstName: "Ada",
+            lastName: "Lovelace",
+            email: "ada@example.com",
+            role: "user",
+          },
+          loading: false,
+          status: "authenticated",
+          error: null,
+          refreshUser: async () => true,
+          logout: async () => {},
+        }}
+      >
+        <AdminGate>
+          <div>admin content</div>
+        </AdminGate>
+      </AuthContext.Provider>,
+    );
+
+    expect(screen.queryByText("admin content")).not.toBeInTheDocument();
+    expect(screen.getByText("Access denied")).toBeInTheDocument();
+    expect(screen.getByText("Administrator permissions are required.")).toBeInTheDocument();
   });
 });

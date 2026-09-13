@@ -1,7 +1,6 @@
 import type { ApiErrorBody } from "@/types/api";
 
 export const AUTH_EXPIRED_EVENT = "koder:auth-expired";
-export const AUTH_FORBIDDEN_EVENT = "koder:auth-forbidden";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -55,9 +54,6 @@ async function request<T>(
   if (!response.ok) {
     if (response.status === 401 && typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT));
-    }
-    if (response.status === 403 && typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent(AUTH_FORBIDDEN_EVENT));
     }
     const errorBody =
       body && typeof body === "object" ? (body as ApiErrorBody) : null;
