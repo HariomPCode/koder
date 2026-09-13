@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import Problems from "@/app/problems/page";
+import { ProblemsClient as Problems } from "@/features/problems/ProblemsClient";
 import { api } from "@/lib/api-client";
 
 let currentUrl = "/problems?page=1&limit=20";

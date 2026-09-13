@@ -21,13 +21,19 @@ const authCookie = process.env.LOAD_TEST_AUTH_COOKIE || "";
 const questionId = process.env.LOAD_TEST_QUESTION_ID || "";
 const contestId = process.env.LOAD_TEST_CONTEST_ID || "";
 const code = process.env.LOAD_TEST_CODE || "function solution() { return 1; }";
-const telemetryIntervalMs = Number(process.env.LOAD_TEST_TELEMETRY_INTERVAL_MS || 5000);
-const mongoContainer = process.env.LOAD_TEST_MONGO_CONTAINER || "leetcode-mongo-1";
-const redisContainer = process.env.LOAD_TEST_REDIS_CONTAINER || "leetcode-redis-1";
+const telemetryIntervalMs = Number(
+  process.env.LOAD_TEST_TELEMETRY_INTERVAL_MS || 5000,
+);
+const mongoContainer =
+  process.env.LOAD_TEST_MONGO_CONTAINER || "leetcode-mongo-1";
+const redisContainer =
+  process.env.LOAD_TEST_REDIS_CONTAINER || "leetcode-redis-1";
 const workerContainer = process.env.LOAD_TEST_WORKER_CONTAINER || "";
 
 if (!scenarios[scenarioNumber]) {
-  throw new Error(`LOAD_TEST_SCENARIO must be one of ${Object.keys(scenarios).join(", ")}`);
+  throw new Error(
+    `LOAD_TEST_SCENARIO must be one of ${Object.keys(scenarios).join(", ")}`,
+  );
 }
 
 function parsePrometheusMetrics(text) {
@@ -49,7 +55,10 @@ function parsePrometheusMetrics(text) {
 
 async function runCommand(file, args) {
   try {
-    const result = await execFileAsync(file, args, { windowsHide: true, maxBuffer: 1024 * 1024 });
+    const result = await execFileAsync(file, args, {
+      windowsHide: true,
+      maxBuffer: 1024 * 1024,
+    });
     return result.stdout.trim();
   } catch {
     return null;
@@ -57,7 +66,13 @@ async function runCommand(file, args) {
 }
 
 async function collectTelemetry() {
-  const sample = { at: new Date().toISOString(), queue: {}, mongo: null, redis: null, worker: null };
+  const sample = {
+    at: new Date().toISOString(),
+    queue: {},
+    mongo: null,
+    redis: null,
+    worker: null,
+  };
   try {
     const metricsResponse = await request("GET", "/metrics");
     const parsed = parsePrometheusMetrics(metricsResponse.body);
@@ -70,40 +85,65 @@ async function collectTelemetry() {
   } catch {}
 
   const mongoStats = await runCommand("docker", [
-    "exec", mongoContainer, "mongosh", "--quiet", "--eval",
+    "exec",
+    mongoContainer,
+    "mongosh",
+    "--quiet",
+    "--eval",
     "const s=db.serverStatus(); print(JSON.stringify({connections:s.connections, opcounters:s.opcounters, mem:s.mem}));",
   ]);
   if (mongoStats) {
-    try { sample.mongo = JSON.parse(mongoStats); } catch {}
+    try {
+      sample.mongo = JSON.parse(mongoStats);
+    } catch {}
   }
 
-  const redisInfo = await runCommand("docker", ["exec", redisContainer, "redis-cli", "INFO", "memory"]);
+  const redisInfo = await runCommand("docker", [
+    "exec",
+    redisContainer,
+    "redis-cli",
+    "INFO",
+    "memory",
+  ]);
   if (redisInfo) {
     sample.redis = {};
     for (const rawLine of redisInfo.split("\n")) {
       const line = rawLine.replace(/\r$/, "");
       const match = line.match(/^([^:]+):(.+)$/);
-      if (match) sample.redis[match[1]] = Number.isNaN(Number(match[2])) ? match[2] : Number(match[2]);
+      if (match)
+        sample.redis[match[1]] = Number.isNaN(Number(match[2]))
+          ? match[2]
+          : Number(match[2]);
     }
   }
 
   if (workerContainer) {
     const workerStats = await runCommand("docker", [
-      "stats", "--no-stream", "--format", "{{json .}}", workerContainer,
+      "stats",
+      "--no-stream",
+      "--format",
+      "{{json .}}",
+      workerContainer,
     ]);
     if (workerStats) {
-      try { sample.worker = JSON.parse(workerStats); } catch {}
+      try {
+        sample.worker = JSON.parse(workerStats);
+      } catch {}
     }
   }
   metrics.telemetry.push(sample);
 }
 
 async function waitForRunning(submissionId) {
-  const deadline = Date.now() + Number(process.env.LOAD_TEST_QUEUE_WAIT_TIMEOUT_MS || 45000);
+  const deadline =
+    Date.now() + Number(process.env.LOAD_TEST_QUEUE_WAIT_TIMEOUT_MS || 45000);
   let enqueueAt = null;
   while (Date.now() < deadline) {
     try {
-      const response = await request("GET", `/api/v1/submissions/${submissionId}`);
+      const response = await request(
+        "GET",
+        `/api/v1/submissions/${submissionId}`,
+      );
       if (response.statusCode === 200) {
         const payload = JSON.parse(response.body);
         const submission = payload.submission || payload;
@@ -111,7 +151,9 @@ async function waitForRunning(submissionId) {
           enqueueAt = new Date(submission.createdAt).getTime();
         }
         if (submission.status === "running") {
-          const startedAt = submission.updatedAt ? new Date(submission.updatedAt).getTime() : Date.now();
+          const startedAt = submission.updatedAt
+            ? new Date(submission.updatedAt).getTime()
+            : Date.now();
           if (Number.isFinite(enqueueAt) && Number.isFinite(startedAt)) {
             metrics.queueWaitMs.push(Math.max(0, startedAt - enqueueAt));
           }
@@ -139,7 +181,10 @@ const metrics = {
 function percentile(values, percentileValue) {
   if (values.length === 0) return null;
   const sorted = [...values].sort((left, right) => left - right);
-  const index = Math.min(sorted.length - 1, Math.ceil((percentileValue / 100) * sorted.length) - 1);
+  const index = Math.min(
+    sorted.length - 1,
+    Math.ceil((percentileValue / 100) * sorted.length) - 1,
+  );
   return Number(sorted[index].toFixed(2));
 }
 
@@ -159,14 +204,21 @@ function request(method, path, body = undefined) {
     const req = transport.request(url, { method, headers }, (res) => {
       let responseBody = "";
       res.setEncoding("utf8");
-      res.on("data", (chunk) => { responseBody += chunk; });
+      res.on("data", (chunk) => {
+        responseBody += chunk;
+      });
       res.on("end", () => {
         const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
         const normalizedPath = url.pathname;
         metrics.requests++;
         metrics.durationsMs.push(durationMs);
-        metrics.statuses[res.statusCode] = (metrics.statuses[res.statusCode] || 0) + 1;
-        metrics.byPath[normalizedPath] = metrics.byPath[normalizedPath] || { requests: 0, errors: 0, durationsMs: [] };
+        metrics.statuses[res.statusCode] =
+          (metrics.statuses[res.statusCode] || 0) + 1;
+        metrics.byPath[normalizedPath] = metrics.byPath[normalizedPath] || {
+          requests: 0,
+          errors: 0,
+          durationsMs: [],
+        };
         metrics.byPath[normalizedPath].requests++;
         metrics.byPath[normalizedPath].durationsMs.push(durationMs);
         if (res.statusCode >= 400) {
@@ -242,13 +294,17 @@ async function runLimited(tasks) {
       }
     }
   }
-  await Promise.all(Array.from({ length: Math.min(maxConcurrency, tasks.length) }, worker));
+  await Promise.all(
+    Array.from({ length: Math.min(maxConcurrency, tasks.length) }, worker),
+  );
 }
 
 async function runScenario() {
   const startedAt = Date.now();
   const endAt = startedAt + durationSeconds * 1000;
-  const plannedSubmissions = Math.ceil(scenario.submissionsPerSecond * durationSeconds);
+  const plannedSubmissions = Math.ceil(
+    scenario.submissionsPerSecond * durationSeconds,
+  );
   const sseClients = [];
   const telemetryTimer = setInterval(() => {
     collectTelemetry().catch(() => {});
@@ -279,10 +335,14 @@ async function runScenario() {
           await request("GET", paths[requestIndex++ % paths.length]);
           if (questionId && submissionCount < plannedSubmissions) {
             submissionCount++;
-            const response = await request("POST", `/api/v1/submissions/${questionId}`, {
-              language: "javascript",
-              code,
-            });
+            const response = await request(
+              "POST",
+              `/api/v1/submissions/${questionId}`,
+              {
+                language: "javascript",
+                code,
+              },
+            );
             if (response.statusCode < 400) {
               const payload = JSON.parse(response.body);
               await waitForRunning(payload.submissionId);
@@ -307,8 +367,12 @@ async function runScenario() {
     plannedSubmissions,
     durationSeconds,
     elapsedSeconds: Number(elapsedSeconds.toFixed(2)),
-    throughputRequestsPerSecond: Number((metrics.requests / elapsedSeconds).toFixed(2)),
-    errorRate: Number((metrics.errors / Math.max(metrics.requests, 1)).toFixed(4)),
+    throughputRequestsPerSecond: Number(
+      (metrics.requests / elapsedSeconds).toFixed(2),
+    ),
+    errorRate: Number(
+      (metrics.errors / Math.max(metrics.requests, 1)).toFixed(4),
+    ),
     latencyMs: {
       p50: percentile(metrics.durationsMs, 50),
       p95: percentile(metrics.durationsMs, 95),

@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import SolveProblem from "@/app/problems/[slug]/page";
+import SolveProblem from "@/features/workspace/SolveProblemClient";
 import type { ProblemDetail } from "@/types/api";
 
 const problem: ProblemDetail = {
@@ -25,10 +25,6 @@ vi.mock("@monaco-editor/react", () => ({
   default: () => <div aria-label="Code editor" />,
 }));
 
-vi.mock("next/navigation", () => ({
-  useParams: () => ({ slug: "two-sum" }),
-}));
-
 vi.mock("@/lib/api-client", () => ({
   api: {
     get,
@@ -42,7 +38,6 @@ describe("workspace page accessibility wiring", () => {
   });
 
   it("provides a functional skip link to the editor workspace", async () => {
-    get.mockResolvedValue({ question: problem });
     Object.defineProperty(window, "matchMedia", {
       configurable: true,
       value: () => ({
@@ -52,7 +47,7 @@ describe("workspace page accessibility wiring", () => {
       }),
     });
 
-    render(<SolveProblem />);
+    render(<SolveProblem problem={problem} slug="two-sum" />);
 
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: /1\. Two Sum/ })).toBeInTheDocument(),
