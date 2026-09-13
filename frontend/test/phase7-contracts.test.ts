@@ -16,7 +16,7 @@ class FakeEventSource {
 
 describe("Phase 7 backend-facing lifecycle contracts", () => {
   it.each<[ContestStatus, string[]]>([
-    ["DRAFT", []],
+    ["DRAFT", ["scheduleContest"]],
     ["SCHEDULED", ["startContest"]],
     ["REGISTRATION", ["startContest"]],
     ["RUNNING", ["endContest"]],

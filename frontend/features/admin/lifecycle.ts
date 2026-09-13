@@ -1,9 +1,13 @@
 import type { ContestStatus } from "@/types/api";
 
-export type ContestLifecycleAction = "startContest" | "endContest" | "finalizeContest";
+export type ContestLifecycleAction =
+  | "scheduleContest"
+  | "startContest"
+  | "endContest"
+  | "finalizeContest";
 
 export const CONTEST_LIFECYCLE_ACTIONS: Record<ContestStatus, ContestLifecycleAction[]> = {
-  DRAFT: [],
+  DRAFT: ["scheduleContest"],
   SCHEDULED: ["startContest"],
   REGISTRATION: ["startContest"],
   RUNNING: ["endContest"],

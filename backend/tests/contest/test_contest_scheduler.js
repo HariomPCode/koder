@@ -35,6 +35,11 @@ function createModel(contests, updateResults = {}) {
 async function runTests() {
   const now = Date.parse("2026-09-11T12:00:00.000Z");
   const contests = [
+    createContest("draft", "DRAFT", {
+      registrationOpenTime: new Date(now - 1000),
+      startTime: new Date(now - 500),
+      endTime: new Date(now + 60_000),
+    }),
     createContest("registration", "SCHEDULED", {
       registrationOpenTime: new Date(now - 1000),
       startTime: new Date(now + 60_000),
@@ -63,7 +68,7 @@ async function runTests() {
   });
 
   const result = await runner();
-  assert.deepStrictEqual(result, { scanned: 4, transitioned: 3, failed: 0 });
+  assert.deepStrictEqual(result, { scanned: 5, transitioned: 3, failed: 0 });
   assert.deepStrictEqual(model.updates, [
     {
       filter: { _id: "registration", status: "SCHEDULED" },
@@ -116,7 +121,7 @@ async function runTests() {
   assert.deepStrictEqual(concurrentResults.map((result) => result.failed), [0, 0]);
 
   const failures = [];
-  const failureModel = createModel(contests.slice(0, 1));
+  const failureModel = createModel(contests.slice(1, 2));
   failureModel.updateOne = async () => {
     throw new Error("Mongo unavailable");
   };

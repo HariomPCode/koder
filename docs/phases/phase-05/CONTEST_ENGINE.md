@@ -264,6 +264,7 @@ Conceptual API boundaries:
 Admin APIs:
 - `POST /admin/contests`
 - `PATCH /admin/contests/:id`
+- `POST /admin/contests/:id/schedule` (`DRAFT` → `SCHEDULED`)
 - `POST /admin/contests/:id/start`
 - `POST /admin/contests/:id/end`
 - `POST /admin/contests/:id/finalize`

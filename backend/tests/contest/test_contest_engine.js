@@ -129,6 +129,16 @@ async function runTests() {
           problems: [{ questionId: question._id, order: 1, points: 100, penaltyMinutes: 5 }],
         },
       });
+      assert.strictEqual(contest.contest.status, ContestService.CONTEST_STATUS.DRAFT);
+
+      await assert.rejects(
+        () =>
+          ContestService.registerParticipant({
+            contestId: contest.contest._id,
+            userId: participantUser._id,
+          }),
+        /Registration is closed for this contest/i,
+      );
 
       await ContestService.transitionContestStatus({
         contestId: contest.contest._id,

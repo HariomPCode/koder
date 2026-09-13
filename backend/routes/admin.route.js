@@ -291,6 +291,23 @@ router.patch("/contests/:contestId", async (req, res, next) => {
   }
 });
 
+router.post("/contests/:contestId/schedule", async (req, res, next) => {
+  try {
+    const { contestId } = req.params;
+    const result = await ContestService.transitionContestStatus({
+      contestId,
+      targetStatus: ContestService.CONTEST_STATUS.SCHEDULED,
+      actorUserId: req.userId,
+    });
+    return res.json(result);
+  } catch (error) {
+    if (error && error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    return next(error);
+  }
+});
+
 router.post("/contests/:contestId/start", async (req, res, next) => {
   try {
     const { contestId } = req.params;

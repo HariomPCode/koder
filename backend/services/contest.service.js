@@ -71,9 +71,13 @@ async function syncContestLifecycle(contest) {
     return contest;
   }
 
-  const nextStatus = getNextContestLifecycleStatus(contest);
+  const now = Date.now();
+  for (let transitionCount = 0; transitionCount < 4; transitionCount += 1) {
+    const nextStatus = getNextContestLifecycleStatus(contest, now);
+    if (nextStatus === contest.status) {
+      break;
+    }
 
-  if (nextStatus !== contest.status) {
     contest.status = nextStatus;
     await contest.save();
     if (nextStatus === CONTEST_STATUS.RUNNING) {
