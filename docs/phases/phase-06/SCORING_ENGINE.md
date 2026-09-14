@@ -819,7 +819,8 @@ Respect Phase 5 contest metadata visibility: standings expose ranks and scores o
 
 | Contest status | Unregister |
 |----------------|------------|
-| `DRAFT`, `SCHEDULED`, `REGISTRATION` | **Allowed** |
+| `REGISTRATION` | **Allowed** |
+| `DRAFT`, `SCHEDULED` | **Blocked** |
 | `RUNNING`, `ENDED`, `FINALIZED` | **Blocked** |
 
 Phase 6 does **not** implement retroactive score removal, disqualification, or standings exclusion for previously registered participants. Disqualification is a future extension.

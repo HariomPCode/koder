@@ -268,6 +268,13 @@ async function unregisterParticipant({ contestId, userId }) {
     throw AppError.notFound("Contest not found");
   }
 
+  const currentContest = await syncContestLifecycle(contest);
+  if (currentContest.status !== CONTEST_STATUS.REGISTRATION) {
+    throw AppError.badRequest(
+      "Unregistration is closed for this contest",
+    );
+  }
+
   const deleted = await ContestRepository.deleteParticipant(contestId, userId);
   if (deleted.deletedCount === 0) {
     throw AppError.notFound("Participant not registered for this contest");

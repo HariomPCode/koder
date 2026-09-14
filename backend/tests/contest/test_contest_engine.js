@@ -211,6 +211,101 @@ async function runTests() {
       assert.strictEqual(participantCount, 1);
     });
 
+    await testCase("Unregistration is allowed only during registration", async () => {
+      const contest = await ContestService.createContest({
+        createdBy: adminUser._id,
+        payload: {
+          title: "Unregistration Policy",
+          slug: "unregistration-policy",
+          description: "Unregistration policy",
+          registrationOpenTime: new Date(Date.now() - 60000),
+          startTime: new Date(Date.now() + 10 * 60 * 1000),
+          endTime: new Date(Date.now() + 20 * 60 * 1000),
+          problems: [{ questionId: question._id, order: 1, points: 100, penaltyMinutes: 5 }],
+        },
+      });
+
+      await ContestService.transitionContestStatus({
+        contestId: contest.contest._id,
+        targetStatus: ContestService.CONTEST_STATUS.SCHEDULED,
+        actorUserId: adminUser._id,
+      });
+      await ContestService.registerParticipant({
+        contestId: contest.contest._id,
+        userId: participantUser._id,
+      });
+
+      const removed = await ContestService.unregisterParticipant({
+        contestId: contest.contest._id,
+        userId: participantUser._id,
+      });
+      assert.deepStrictEqual(removed, { removed: true });
+      assert.strictEqual(
+        await ContestParticipant.countDocuments({
+          contestId: contest.contest._id,
+          userId: participantUser._id,
+        }),
+        0,
+      );
+    });
+
+    await testCase("Unregistration is rejected after registration closes", async () => {
+      const statuses = [
+        ContestService.CONTEST_STATUS.RUNNING,
+        ContestService.CONTEST_STATUS.ENDED,
+        ContestService.CONTEST_STATUS.FINALIZED,
+      ];
+
+      for (const status of statuses) {
+        const contest = await ContestService.createContest({
+          createdBy: adminUser._id,
+          payload: {
+            title: `Closed Unregistration ${status}`,
+            slug: `closed-unregistration-${status.toLowerCase()}`,
+            description: "Closed unregistration policy",
+            registrationOpenTime: new Date(Date.now() - 60000),
+            startTime: new Date(Date.now() + 10 * 60 * 1000),
+            endTime: new Date(Date.now() + 20 * 60 * 1000),
+            problems: [{ questionId: question._id, order: 1, points: 100, penaltyMinutes: 5 }],
+          },
+        });
+
+        await ContestService.transitionContestStatus({
+          contestId: contest.contest._id,
+          targetStatus: ContestService.CONTEST_STATUS.SCHEDULED,
+          actorUserId: adminUser._id,
+        });
+        await ContestService.registerParticipant({
+          contestId: contest.contest._id,
+          userId: participantUser._id,
+        });
+        await Contest.updateOne(
+          { _id: contest.contest._id },
+          { $set: { status } },
+        );
+
+        await assert.rejects(
+          () =>
+            ContestService.unregisterParticipant({
+              contestId: contest.contest._id,
+              userId: participantUser._id,
+            }),
+          (error) => {
+            assert.strictEqual(error.statusCode, 400);
+            assert.match(error.message, /Unregistration is closed/i);
+            return true;
+          },
+        );
+        assert.strictEqual(
+          await ContestParticipant.countDocuments({
+            contestId: contest.contest._id,
+            userId: participantUser._id,
+          }),
+          1,
+        );
+      }
+    });
+
     await testCase("Contest problem validation rejects invalid foreign problem IDs", async () => {
       const contest = await ContestService.createContest({
         createdBy: adminUser._id,
